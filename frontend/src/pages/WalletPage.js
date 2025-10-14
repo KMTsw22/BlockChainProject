@@ -23,7 +23,6 @@ import {
   Refresh as RefreshIcon
 } from '@mui/icons-material';
 import { useWallet } from '../contexts/WalletContext';
-import { useAuth } from '../contexts/AuthContext';
 
 const WalletPage = () => {
   const { 

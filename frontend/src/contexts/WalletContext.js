@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
 import { useAuth } from './AuthContext';
 
@@ -31,7 +31,7 @@ export const WalletProvider = ({ children }) => {
     }
   });
 
-  const fetchWalletInfo = async () => {
+  const fetchWalletInfo = useCallback(async () => {
     if (!token) return;
     
     try {
@@ -43,9 +43,9 @@ export const WalletProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, api]);
 
-  const fetchBalance = async () => {
+  const fetchBalance = useCallback(async () => {
     if (!token) return;
     
     try {
@@ -57,7 +57,7 @@ export const WalletProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [token, api]);
 
   const mintTokens = async (amount) => {
     try {
