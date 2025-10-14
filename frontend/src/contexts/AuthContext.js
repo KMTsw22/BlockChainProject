@@ -30,7 +30,8 @@ export const AuthProvider = ({ children }) => {
   const login = async (provider, socialData) => {
     try {
       // 로컬 개발에서는 /auth 경로 사용
-      const response = await axios.post('/auth/social-login', {
+      //const response = await axios.post('/auth/social-login', {
+        const response = await axios.post('/api/auth/social-login', {
         provider,
         social_id: socialData.id,
         email: socialData.email,
