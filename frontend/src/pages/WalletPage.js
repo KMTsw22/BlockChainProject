@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import {
   Container,
   Typography,
-  Paper,
   Grid,
   Card,
   CardContent,
@@ -14,9 +13,7 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  CircularProgress,
-  Tabs,
-  Tab
+  CircularProgress
 } from '@mui/material';
 import {
   AccountBalanceWallet as WalletIcon,
@@ -29,7 +26,6 @@ import { useWallet } from '../contexts/WalletContext';
 import { useAuth } from '../contexts/AuthContext';
 
 const WalletPage = () => {
-  const { user } = useAuth();
   const { 
     balance, 
     walletInfo, 
@@ -40,8 +36,6 @@ const WalletPage = () => {
     stakeTokens, 
     claimRewards 
   } = useWallet();
-  
-  const [activeTab, setActiveTab] = useState(0);
   const [mintAmount, setMintAmount] = useState('');
   const [transferTo, setTransferTo] = useState('');
   const [transferAmount, setTransferAmount] = useState('');

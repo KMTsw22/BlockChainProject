@@ -135,7 +135,7 @@ export const WalletProvider = ({ children }) => {
       fetchWalletInfo();
       fetchBalance();
     }
-  }, [token]);
+  }, [token, fetchWalletInfo, fetchBalance]);
 
   const value = {
     walletInfo,
