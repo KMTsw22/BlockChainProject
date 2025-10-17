@@ -10,6 +10,8 @@ import hashlib
 import secrets
 from web3 import Web3
 import json
+from google.auth.transport import requests
+from google.oauth2 import id_token
 
 # FastAPI 앱 생성
 app = FastAPI(title="소셜 지갑 API", version="1.0.0")
@@ -447,6 +449,89 @@ async def get_wallet_info(user_id: str = Depends(verify_token)):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"지갑 정보 조회 중 오류 발생: {str(e)}")
+
+# Google OAuth 처리
+class GoogleTokenRequest(BaseModel):
+    token: str
+
+@app.post("/auth/google")
+async def google_auth(request: GoogleTokenRequest):
+    """Google OAuth 토큰 검증 및 사용자 생성"""
+    try:
+        # Google ID 토큰 검증
+        GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+        if not GOOGLE_CLIENT_ID:
+            raise HTTPException(status_code=500, detail="Google OAuth 설정이 필요합니다")
+        
+        # ID 토큰 검증
+        idinfo = id_token.verify_oauth2_token(
+            request.token, 
+            requests.Request(), 
+            GOOGLE_CLIENT_ID
+        )
+        
+        # 사용자 정보 추출
+        google_id = idinfo['sub']
+        email = idinfo['email']
+        name = idinfo.get('name', email.split('@')[0])
+        
+        # 기존 사용자 확인
+        existing_user = None
+        for user_id, user in users_db.items():
+            if user.get('google_id') == google_id:
+                existing_user = user
+                break
+        
+        if existing_user:
+            # 기존 사용자 로그인
+            access_token = create_access_token(data={"sub": existing_user["id"]})
+            return {
+                "access_token": access_token,
+                "token_type": "bearer",
+                "user": existing_user,
+                "is_new_user": False
+            }
+        else:
+            # 새 사용자 생성
+            user_id = f"user_{secrets.token_hex(8)}"
+            
+            # 새 지갑 생성
+            account = w3.eth.account.create()
+            wallet_id = f"wallet_{secrets.token_hex(8)}"
+            
+            wallet = {
+                "id": wallet_id,
+                "address": account.address,
+                "private_key": account.key.hex(),
+                "created_at": datetime.now().isoformat()
+            }
+            wallets_db[wallet_id] = wallet
+            
+            # 새 사용자 생성
+            user = {
+                "id": user_id,
+                "google_id": google_id,
+                "email": email,
+                "name": name,
+                "wallet_id": wallet_id,
+                "created_at": datetime.now().isoformat()
+            }
+            users_db[user_id] = user
+            
+            # JWT 토큰 생성
+            access_token = create_access_token(data={"sub": user_id})
+            
+            return {
+                "access_token": access_token,
+                "token_type": "bearer",
+                "user": user,
+                "is_new_user": True
+            }
+            
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"유효하지 않은 Google 토큰: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Google 인증 중 오류 발생: {str(e)}")
 
 # Vercel 서버리스 함수 핸들러
 handler = app

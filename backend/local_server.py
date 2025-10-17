@@ -10,7 +10,12 @@ import jwt
 import hashlib
 import secrets
 from web3 import Web3
-import json
+from google.auth.transport import requests
+from google.oauth2 import id_token
+from dotenv import load_dotenv
+
+# .env 파일 로드
+load_dotenv()
 
 # FastAPI 앱 생성
 app = FastAPI(title="소셜 지갑 API (로컬)", version="1.0.0")
@@ -29,80 +34,20 @@ SECRET_KEY = os.getenv("SECRET_KEY", "your-secret-key-here")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
-# Web3 설정 (로컬에서는 시뮬레이션)
-WEB3_PROVIDER = os.getenv("WEB3_PROVIDER", "https://sepolia.infura.io/v3/YOUR_INFURA_KEY")
+# Web3 설정 (지갑 생성용)
+WEB3_PROVIDER = os.getenv("WEB3_PROVIDER", "https://sepolia.infura.io/v3/e8630d4f3cd6413ea851365717502af4")
 w3 = Web3(Web3.HTTPProvider(WEB3_PROVIDER))
 
-# 스마트 컨트랙트 설정
-CONTRACT_ADDRESS = "0xf327d45c12abc5b9fbe963989f9acc7fa3bd6c60"
-CONTRACT_ABI = [
-    {
-        "inputs": [],
-        "name": "name",
-        "outputs": [{"internalType": "string", "name": "", "type": "string"}],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [],
-        "name": "symbol",
-        "outputs": [{"internalType": "string", "name": "", "type": "string"}],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [{"internalType": "address", "name": "account", "type": "address"}],
-        "name": "balanceOf",
-        "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
-        "stateMutability": "view",
-        "type": "function"
-    },
-    {
-        "inputs": [{"internalType": "address", "name": "to", "type": "address"}, {"internalType": "uint256", "name": "amount", "type": "uint256"}],
-        "name": "mint",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
-    },
-    {
-        "inputs": [{"internalType": "address", "name": "to", "type": "address"}, {"internalType": "uint256", "name": "amount", "type": "uint256"}],
-        "name": "transfer",
-        "outputs": [{"internalType": "bool", "name": "", "type": "bool"}],
-        "stateMutability": "nonpayable",
-        "type": "function"
-    },
-    {
-        "inputs": [{"internalType": "uint256", "name": "amount", "type": "uint256"}],
-        "name": "stake",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
-    },
-    {
-        "inputs": [],
-        "name": "claimRewards",
-        "outputs": [],
-        "stateMutability": "nonpayable",
-        "type": "function"
-    },
-    {
-        "inputs": [{"internalType": "address", "name": "user", "type": "address"}],
-        "name": "getStakeInfo",
-        "outputs": [
-            {"internalType": "uint256", "name": "amount", "type": "uint256"},
-            {"internalType": "uint256", "name": "startTime", "type": "uint256"},
-            {"internalType": "uint256", "name": "lastClaimTime", "type": "uint256"},
-            {"internalType": "bool", "name": "isActive", "type": "bool"},
-            {"internalType": "uint256", "name": "pendingReward", "type": "uint256"}
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    }
-]
+# Web3 연결 상태 콘솔 출력
+print(f"🔗 Web3 연결: {w3.is_connected()}")
+if w3.is_connected():
+    print(f"📊 블록: {w3.eth.block_number}")
+    print(f"🔗 체인: {w3.eth.chain_id}")
+else:
+    print("❌ 연결 실패!")
 
 # 메모리 저장소 (로컬 개발용)
 users_db: Dict[str, Dict] = {}
-wallets_db: Dict[str, Dict] = {}
 
 # Pydantic 모델들
 class SocialLoginRequest(BaseModel):
@@ -112,21 +57,16 @@ class SocialLoginRequest(BaseModel):
     name: str
     profile_image: Optional[str] = None
 
-class TokenBalance(BaseModel):
-    balance: str
-    staked_amount: str
-    pending_rewards: str
-    is_staking_active: bool
+class GoogleTokenRequest(BaseModel):
+    token: str
 
-class MintRequest(BaseModel):
-    amount: int
+class PrivateKeyRequest(BaseModel):
+    private_key: str
 
-class TransferRequest(BaseModel):
-    to_address: str
-    amount: int
+class PasswordLoginRequest(BaseModel):
+    social_id: str
+    password: str
 
-class StakeRequest(BaseModel):
-    amount: int
 
 # JWT 토큰 생성
 def create_access_token(data: dict):
@@ -155,11 +95,11 @@ def verify_token(credentials: HTTPAuthorizationCredentials = Depends(HTTPBearer(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-# 지갑 생성 함수
-def generate_wallet_from_social(social_id: str, email: str, name: str) -> Dict[str, str]:
-    """소셜 계정 정보를 기반으로 결정론적 지갑 생성"""
-    # 소셜 계정 정보를 기반으로 시드 생성
-    seed_string = f"{social_id}_{email}_{name}"
+# 지갑 생성 함수 (social_id + password)
+def generate_wallet_from_credentials(social_id: str, password: str) -> Dict[str, str]:
+    """social_id + password로 지갑 생성"""
+    # social_id + password로 시드 생성
+    seed_string = f"{social_id}_{password}"
     seed_hash = hashlib.sha256(seed_string.encode()).hexdigest()
     
     # 시드로부터 지갑 생성
@@ -171,9 +111,17 @@ def generate_wallet_from_social(social_id: str, email: str, name: str) -> Dict[s
         "seed": seed_hash
     }
 
-# 스마트 컨트랙트 인스턴스 생성
-def get_contract():
-    return w3.eth.contract(address=CONTRACT_ADDRESS, abi=CONTRACT_ABI)
+
+# Private Key 검증 함수
+def verify_private_key(private_key: str, expected_address: str) -> bool:
+    """Private Key가 해당 지갑 주소와 일치하는지 확인"""
+    try:
+        account = w3.eth.account.from_key(private_key)
+        return account.address.lower() == expected_address.lower()
+    except Exception:
+        return False
+
+# 스마트 컨트랙트 관련 함수 제거 - 클라이언트에서 직접 처리
 
 # API 엔드포인트들
 
@@ -181,202 +129,153 @@ def get_contract():
 async def root():
     return {"message": "소셜 지갑 API 서버가 실행 중입니다! (로컬 개발 모드)"}
 
-@app.post("/auth/social-login")
-async def social_login(request: SocialLoginRequest):
-    """소셜 로그인 처리 및 지갑 생성"""
+
+@app.post("/auth/password")
+async def password_auth(request: PasswordLoginRequest):
+    """비밀번호 기반 로그인/생성 (인증만 담당)"""
     try:
-        # 기존 사용자 확인
-        user_key = f"{request.provider}_{request.social_id}"
+        # social_id로 사용자 조회
+        user_key = f"google_{request.social_id}"
+        user = users_db.get(user_key)
         
-        if user_key in users_db:
-            # 기존 사용자 - 지갑 정보 반환
-            user = users_db[user_key]
-            wallet = wallets_db[user["wallet_id"]]
-            
-            access_token = create_access_token(data={"sub": user_key})
-            
-            return {
-                "access_token": access_token,
-                "token_type": "bearer",
-                "user": {
-                    "id": user_key,
-                    "provider": request.provider,
-                    "email": request.email,
-                    "name": request.name,
-                    "profile_image": request.profile_image
-                },
-                "wallet": {
-                    "address": wallet["address"],
-                    "created_at": wallet["created_at"]
-                }
+        if not user:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
+        
+        # social_id + password로 지갑 생성
+        wallet_info = generate_wallet_from_credentials(request.social_id, request.password)
+        wallet_address = wallet_info["address"]
+        
+        # 사용자 정보에 지갑 주소 업데이트
+        user["wallet_address"] = wallet_address
+        users_db[user_key] = user
+        
+        # JWT 토큰 생성
+        access_token = create_access_token(data={"sub": user_key})
+        
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "user": {
+                "id": user_key,
+                "email": user.get("email"),
+                "name": user.get("name")
+            },
+            "wallet": {
+                "address": wallet_address,
+                "private_key": wallet_info["private_key"]  # 클라이언트에서 직접 사용
             }
-        else:
-            # 새 사용자 - 지갑 생성
-            wallet_info = generate_wallet_from_social(
-                request.social_id, 
-                request.email, 
-                request.name
-            )
-            
-            # 사용자 정보 저장
-            user_id = f"{request.provider}_{request.social_id}"
-            wallet_id = f"wallet_{secrets.token_hex(16)}"
-            
-            users_db[user_id] = {
-                "id": user_id,
-                "provider": request.provider,
-                "social_id": request.social_id,
-                "email": request.email,
-                "name": request.name,
-                "profile_image": request.profile_image,
-                "wallet_id": wallet_id,
-                "created_at": datetime.utcnow()
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"로그인 처리 중 오류 발생: {str(e)}")
+
+@app.post("/auth/google")
+async def google_auth(request: GoogleTokenRequest):
+    """Google OAuth 토큰 검증 및 사용자 생성"""
+    try:
+        # Google ID 토큰 검증
+        GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "642921295-hbu979qt4a2ndq1ucpf4j8v83kmfs8mk.apps.googleusercontent.com")
+        
+        # Google ID 토큰 검증
+        idinfo = id_token.verify_oauth2_token(
+            request.token, 
+            requests.Request(), 
+            GOOGLE_CLIENT_ID
+        )
+        
+        # 사용자 정보 추출
+        google_id = idinfo['sub']
+        email = idinfo['email']
+        name = idinfo.get('name', email.split('@')[0])
+        profile_image = idinfo.get('picture', '')
+        
+        # 사용자 정보 저장 (비밀번호 설정을 위해)
+        user_key = f"google_{google_id}"
+        
+        users_db[user_key] = {
+            "id": user_key,
+            "provider": "google",
+            "social_id": google_id,
+            "email": email,
+            "name": name,
+            "profile_image": profile_image,
+            "created_at": datetime.utcnow()
+        }
+        
+        return {
+            "message": "Google 인증 성공. 비밀번호를 설정해주세요.",
+            "user": {
+                "id": user_key,
+                "email": email,
+                "name": name,
+                "profile_image": profile_image
             }
-            
-            wallets_db[wallet_id] = {
-                "id": wallet_id,
-                "address": wallet_info["address"],
-                "private_key": wallet_info["private_key"],
-                "social_provider": request.provider,
-                "social_id": request.social_id,
-                "created_at": datetime.utcnow()
-            }
-            
-            access_token = create_access_token(data={"sub": user_id})
-            
-            return {
-                "access_token": access_token,
-                "token_type": "bearer",
-                "user": {
-                    "id": user_id,
-                    "provider": request.provider,
-                    "email": request.email,
-                    "name": request.name,
-                    "profile_image": request.profile_image
-                },
-                "wallet": {
-                    "address": wallet_info["address"],
-                    "created_at": datetime.utcnow()
-                }
-            }
+        }
             
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"로그인 처리 중 오류 발생: {str(e)}")
 
-@app.get("/wallet/balance")
-async def get_wallet_balance(user_id: str = Depends(verify_token)):
-    """지갑 잔액 조회 (로컬 시뮬레이션)"""
-    try:
-        # 사용자 정보 조회
-        user = users_db.get(user_id)
-        if not user:
-            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
-        
-        wallet = wallets_db.get(user["wallet_id"])
-        if not wallet:
-            raise HTTPException(status_code=404, detail="지갑을 찾을 수 없습니다")
-        
-        # 로컬에서는 시뮬레이션 데이터 반환
-        return TokenBalance(
-            balance="1000000",  # 1000 ART (5 decimals)
-            staked_amount="500000",  # 500 ART
-            pending_rewards="50000",  # 50 ART
-            is_staking_active=True
-        )
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"잔액 조회 중 오류 발생: {str(e)}")
+# 잔액 조회는 클라이언트에서 직접 스마트 컨트랙트 호출
 
-@app.post("/wallet/mint")
-async def mint_tokens(request: MintRequest, user_id: str = Depends(verify_token)):
-    """토큰 발행 (로컬 시뮬레이션)"""
+# 토큰 발행은 클라이언트에서 직접 스마트 컨트랙트 호출
+
+# 토큰 전송은 클라이언트에서 직접 스마트 컨트랙트 호출
+
+# 스테이킹은 클라이언트에서 직접 스마트 컨트랙트 호출
+
+# 보상 청구는 클라이언트에서 직접 스마트 컨트랙트 호출
+
+@app.post("/wallet/verify-private-key")
+async def verify_private_key(request: PrivateKeyRequest, user_id: str = Depends(verify_token)):
+    """Private Key 검증 및 계좌 연동"""
     try:
         user = users_db.get(user_id)
         if not user:
             raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
+        
+        wallet_address = user.get("wallet_address")
+        if not wallet_address:
+            raise HTTPException(status_code=404, detail="지갑 주소를 찾을 수 없습니다")
+        
+        # Private Key 검증
+        if not verify_private_key(request.private_key, wallet_address):
+            raise HTTPException(status_code=400, detail="Private Key가 지갑 주소와 일치하지 않습니다")
         
         return {
-            "message": f"{request.amount} 토큰이 발행되었습니다 (로컬 시뮬레이션)",
-            "transaction_hash": "0x" + secrets.token_hex(32)
+            "message": "Private Key 검증 성공",
+            "wallet_address": wallet_address,
+            "verified": True
         }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"토큰 발행 중 오류 발생: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Private Key 검증 중 오류 발생: {str(e)}")
 
-@app.post("/wallet/transfer")
-async def transfer_tokens(request: TransferRequest, user_id: str = Depends(verify_token)):
-    """토큰 전송 (로컬 시뮬레이션)"""
+@app.get("/user/profile")
+async def get_user_profile(user_id: str = Depends(verify_token)):
+    """사용자 프로필 조회"""
     try:
         user = users_db.get(user_id)
         if not user:
             raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
         
         return {
-            "message": f"{request.amount} 토큰이 전송되었습니다 (로컬 시뮬레이션)",
-            "transaction_hash": "0x" + secrets.token_hex(32)
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"토큰 전송 중 오류 발생: {str(e)}")
-
-@app.post("/wallet/stake")
-async def stake_tokens(request: StakeRequest, user_id: str = Depends(verify_token)):
-    """토큰 스테이킹 (로컬 시뮬레이션)"""
-    try:
-        user = users_db.get(user_id)
-        if not user:
-            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
-        
-        return {
-            "message": f"{request.amount} 토큰이 스테이킹되었습니다 (로컬 시뮬레이션)",
-            "transaction_hash": "0x" + secrets.token_hex(32)
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"스테이킹 중 오류 발생: {str(e)}")
-
-@app.post("/wallet/claim-rewards")
-async def claim_rewards(user_id: str = Depends(verify_token)):
-    """보상 청구 (로컬 시뮬레이션)"""
-    try:
-        user = users_db.get(user_id)
-        if not user:
-            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
-        
-        return {
-            "message": "보상이 청구되었습니다 (로컬 시뮬레이션)",
-            "transaction_hash": "0x" + secrets.token_hex(32)
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"보상 청구 중 오류 발생: {str(e)}")
-
-@app.get("/wallet/info")
-async def get_wallet_info(user_id: str = Depends(verify_token)):
-    """지갑 정보 조회"""
-    try:
-        user = users_db.get(user_id)
-        if not user:
-            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
-        
-        wallet = wallets_db.get(user["wallet_id"])
-        if not wallet:
-            raise HTTPException(status_code=404, detail="지갑을 찾을 수 없습니다")
-        
-        return {
-            "user": user,
-            "wallet": {
-                "address": wallet["address"],
-                "created_at": wallet["created_at"]
+            "user": {
+                "id": user.get("id"),
+                "email": user.get("email"),
+                "name": user.get("name"),
+                "profile_image": user.get("profile_image"),
+                "wallet_address": user.get("wallet_address"),
+                "created_at": user.get("created_at")
             }
         }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"지갑 정보 조회 중 오류 발생: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"사용자 정보 조회 중 오류 발생: {str(e)}")
 
 if __name__ == "__main__":
-    print("🚀 로컬 개발 서버 시작...")
+    print("🚀 인증 서버 시작 (스마트 컨트랙트는 클라이언트에서 직접 처리)...")
     print("📱 프론트엔드: http://localhost:3000")
     print("🔧 백엔드 API: http://localhost:8000")
     print("📖 API 문서: http://localhost:8000/docs")
+    print("💡 스마트 컨트랙트 작업은 클라이언트에서 직접 처리됩니다")
     uvicorn.run(app, host="0.0.0.0", port=8000)

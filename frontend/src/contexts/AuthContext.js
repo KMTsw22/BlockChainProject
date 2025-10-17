@@ -27,29 +27,24 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
-  const login = async (provider, socialData) => {
+  const login = async (accessToken, userData) => {
     try {
-      // 로컬 개발에서는 /auth 경로 사용
-      //const response = await axios.post('/auth/social-login', {
-        const response = await axios.post('/api/auth/social-login', {
-        provider,
-        social_id: socialData.id,
-        email: socialData.email,
-        name: socialData.name,
-        profile_image: socialData.picture || socialData.profile_image
+      // Google OAuth 토큰을 사용한 로그인
+      const response = await axios.post('/auth/google', {
+        token: accessToken
       });
 
-      const { access_token, user: userData, wallet } = response.data;
+      const { access_token, user, wallet } = response.data;
       
       // 토큰과 사용자 정보 저장
       localStorage.setItem('access_token', access_token);
-      localStorage.setItem('user', JSON.stringify(userData));
+      localStorage.setItem('user', JSON.stringify(user));
       localStorage.setItem('wallet', JSON.stringify(wallet));
       
       setToken(access_token);
-      setUser(userData);
+      setUser(user);
       
-      return { success: true, user: userData, wallet };
+      return { success: true, user, wallet };
     } catch (error) {
       console.error('로그인 오류:', error);
       return { success: false, error: error.response?.data?.detail || '로그인에 실패했습니다.' };

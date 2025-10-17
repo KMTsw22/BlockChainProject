@@ -6,3 +6,6 @@ python-dotenv==1.0.0
 web3==6.11.3
 pydantic==2.5.0
 httpx==0.25.2
+google-auth==2.23.4
+google-auth-oauthlib==1.1.0
+google-auth-httplib2==0.1.1

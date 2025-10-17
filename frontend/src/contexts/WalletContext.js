@@ -24,13 +24,21 @@ export const WalletProvider = ({ children }) => {
   const [loading, setLoading] = useState(false);
 
   const api = axios.create({
-    //baseURL: process.env.REACT_APP_API_URL || 'http://localhost:8000', // 로컬 개발 서버
-    baseURL: process.env.REACT_APP_API_URL || '/api', // 서버리스 환경에서는 /api 사용
+    baseURL: process.env.REACT_APP_API_URL || 'http://localhost:8000', // 로컬 개발 서버
+    //baseURL: process.env.REACT_APP_API_URL || '/api', // 서버리스 환경에서는 /api 사용
     headers: {
-      'Authorization': token ? `Bearer ${token}` : '',
       'Content-Type': 'application/json'
     }
   });
+
+  // 토큰이 변경될 때마다 헤더 업데이트
+  useEffect(() => {
+    if (token) {
+      api.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+    } else {
+      delete api.defaults.headers.common['Authorization'];
+    }
+  }, [token]);
 
   const fetchWalletInfo = useCallback(async () => {
     if (!token) return;

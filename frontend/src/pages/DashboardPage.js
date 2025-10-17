@@ -14,16 +14,22 @@ import {
   AccountBalanceWallet as WalletIcon,
   TrendingUp as TrendingUpIcon,
   Security as SecurityIcon,
-  MonetizationOn as TokenIcon
+  MonetizationOn as TokenIcon,
+  Logout as LogoutIcon
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
 import { useNavigate } from 'react-router-dom';
 
 const DashboardPage = () => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const { balance, walletInfo } = useWallet();
   const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   const formatBalance = (balance) => {
     return (parseFloat(balance) / Math.pow(10, 5)).toFixed(2);
@@ -31,13 +37,24 @@ const DashboardPage = () => {
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Box sx={{ mb: 4 }}>
-        <Typography variant="h4" component="h1" gutterBottom>
-          🎉 환영합니다, {user?.name}님!
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          {user?.provider?.toUpperCase()} 계정으로 연결된 지갑이 성공적으로 생성되었습니다.
-        </Typography>
+      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <Box>
+          <Typography variant="h4" component="h1" gutterBottom>
+            🎉 환영합니다, {user?.name}님!
+          </Typography>
+          <Typography variant="body1" color="text.secondary">
+            {user?.provider?.toUpperCase()} 계정으로 연결된 지갑이 성공적으로 생성되었습니다.
+          </Typography>
+        </Box>
+        <Button
+          variant="outlined"
+          color="error"
+          startIcon={<LogoutIcon />}
+          onClick={handleLogout}
+          sx={{ ml: 2 }}
+        >
+          로그아웃
+        </Button>
       </Box>
 
       <Grid container spacing={3}>

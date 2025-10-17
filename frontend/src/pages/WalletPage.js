@@ -231,6 +231,7 @@ const WalletPage = () => {
                 sx={{ 
                   fontFamily: 'monospace', 
                   backgroundColor: '#f5f5f5', 
+                  color: '#000000',
                   padding: 1, 
                   borderRadius: 1,
                   wordBreak: 'break-all',
