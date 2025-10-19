@@ -735,18 +735,34 @@ async def password_auth(request: PasswordLoginRequest):
             user = db.users.find_one({"google_id": request.social_id})
             logger.info(f"Google ID로 검색 시도: {request.social_id}")
         
+        # 데이터베이스 정보 로깅
+        logger.info(f"🗄️ DB 정보 - 이름: {db.name}, 컬렉션: users")
+        logger.info(f"🗄️ users 컬렉션 문서 수: {db.users.count_documents({})}")
+        
         if not user:
             logger.error(f"사용자를 찾을 수 없음: {request.social_id}")
+            # 디버깅: 모든 사용자 ID 출력
+            all_user_ids = [str(u["_id"]) for u in db.users.find({}, {"_id": 1}).limit(5)]
+            logger.error(f"🗄️ DB에 있는 사용자 ID 샘플 (최대 5개): {all_user_ids}")
             raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
+        
+        # 사용자 발견 시 정보 로깅
+        logger.info(f"✅ 사용자 발견 - ID: {user['_id']}, email: {user.get('email')}")
+        logger.info(f"✅ wallet_created: {user.get('wallet_created')}, wallet_password 존재: {bool(user.get('wallet_password'))}")
         
         # 지갑 생성 제한: 한 소셜 아이디당 하나의 지갑만 허용
         if user.get("wallet_created"):
             # 이미 지갑이 생성된 사용자 - 비밀번호 검증
             stored_password = user.get("wallet_password")
             logger.info("기존 지갑 확인 - 비밀번호 검증 중")
+            logger.info(f"🔐 저장된 비밀번호: '{stored_password}' (type: {type(stored_password).__name__}, len: {len(stored_password) if stored_password else 0})")
+            logger.info(f"🔐 입력된 비밀번호: '{request.password}' (type: {type(request.password).__name__}, len: {len(request.password)})")
+            logger.info(f"🔐 비교 결과: {stored_password == request.password}")
             
             if stored_password and stored_password != request.password:
-                logger.error("비밀번호 불일치")
+                logger.error(f"❌ 비밀번호 불일치!")
+                logger.error(f"   - 저장된 값: '{stored_password}'")
+                logger.error(f"   - 입력된 값: '{request.password}'")
                 raise HTTPException(status_code=401, detail="비밀번호가 일치하지 않습니다")
             
             # 비밀번호 검증 성공 - 기존 지갑 사용

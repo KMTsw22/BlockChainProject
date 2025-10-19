@@ -22,7 +22,11 @@ def get_mongodb_client():
     """MongoDB 클라이언트 반환 (동기)"""
     global client
     if client is None:
+        # 연결 정보 로깅 (비밀번호 숨김)
+        safe_url = MONGODB_URL.split('@')[1] if '@' in MONGODB_URL else MONGODB_URL
+        print(f"🔗 MongoDB 연결 중: ...@{safe_url}")
         client = MongoClient(MONGODB_URL)
+        print(f"✅ MongoDB 클라이언트 생성 완료")
     return client
 
 def get_mongodb_database():
@@ -31,6 +35,10 @@ def get_mongodb_database():
     if database is None:
         client = get_mongodb_client()
         database = client["ART_BASE"]  # 이미지에서 보이는 데이터베이스명
+        print(f"📦 사용 중인 데이터베이스: ART_BASE")
+        # 컬렉션 목록 출력
+        collections = database.list_collection_names()
+        print(f"📋 컬렉션 목록: {collections}")
     return database
 
 async def get_async_mongodb_client():
