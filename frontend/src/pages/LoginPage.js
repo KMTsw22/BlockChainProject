@@ -199,15 +199,14 @@ const LoginPage = () => {
       localStorage.setItem('user_password', passwordDialog.password); // 비밀번호 저장
       localStorage.setItem('is_existing_wallet', passwordData.is_existing_wallet); // 지갑 상태 저장
       
-      // 사용자에게 메시지 표시
-      if (passwordData.is_existing_wallet) {
-        setError('기존 지갑으로 로그인합니다.');
-      } else {
-        setError('새 지갑이 생성됩니다.');
-      }
+      console.log('✅ 로그인 성공! 토큰 저장 완료');
+      console.log('🚀 대시보드로 이동 중...');
       
       // 다이얼로그 닫기
       setPasswordDialog({ open: false, social_id: '', isNewUser: false, mnemonic: '', showMnemonic: false });
+      
+      // 로딩 종료
+      setLoading(false);
       
       // 대시보드로 이동
       navigate('/dashboard');
