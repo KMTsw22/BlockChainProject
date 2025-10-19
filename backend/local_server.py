@@ -16,8 +16,8 @@ from database import get_mongodb_database
 load_dotenv()
 
 # 이더리움 설정
-ETH_RPC_URL = os.getenv("ETH_RPC_URL", "https://sepolia.infura.io/v3/YOUR_INFURA_KEY")
-w3 = Web3(Web3.HTTPProvider(ETH_RPC_URL))
+WEB3_PROVIDER = os.getenv("WEB3_PROVIDER", "https://sepolia.infura.io/v3/YOUR_INFURA_KEY")
+w3 = Web3(Web3.HTTPProvider(WEB3_PROVIDER))
 
 # 프로젝트 지갑 설정
 PROJECT_PRIVATE_KEY = os.getenv("PROJECT_PRIVATE_KEY")
