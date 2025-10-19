@@ -605,6 +605,11 @@ async def get_wallet_info(user_id: str = Depends(verify_token)):
 class GoogleTokenRequest(BaseModel):
     token: str
 
+class PasswordLoginRequest(BaseModel):
+    social_id: str
+    password: str
+    wallet_address: str = None  # 지갑 주소 (선택사항)
+
 @app.post("/auth/google")
 async def google_auth(request: GoogleTokenRequest):
     """Google OAuth 토큰 검증 및 사용자 생성"""
@@ -652,41 +657,26 @@ async def google_auth(request: GoogleTokenRequest):
                     "google_id": existing_user["google_id"],
                     "email": existing_user["email"],
                     "name": existing_user["name"],
-                    "wallet_id": existing_user.get("wallet_id"),
-                    "created_at": existing_user["created_at"]
+                    "profile_image": existing_user.get("profile_image"),
+                    "wallet_address": existing_user.get("wallet_address"),
+                    "wallet_created": existing_user.get("wallet_created", False),
+                    "created_at": existing_user.get("created_at")
                 },
                 "is_new_user": False
             }
         else:
-            # 새 사용자 생성
+            # 새 사용자 생성 (지갑은 프론트엔드에서 생성)
             logger.info("새 사용자 생성 시작")
-            user_id = f"user_{secrets.token_hex(8)}"
             
-            # 새 지갑 생성
-            logger.info("새 지갑 생성 중")
-            account = w3.eth.account.create()
-            wallet_id = f"wallet_{secrets.token_hex(8)}"
-            logger.info(f"지갑 주소 생성 완료: {account.address}")
-            
-            # 지갑 정보를 MongoDB에 저장
-            logger.info("MongoDB에 지갑 정보 저장 중")
-            wallet_data = {
-                "user_id": user_id,
-                "address": account.address,
-                "private_key": account.key.hex(),
-                "created_at": datetime.now(),
-                "updated_at": datetime.now()
-            }
-            wallet_result = db.wallets.insert_one(wallet_data)
-            logger.info(f"지갑 정보 저장 완료: {wallet_result.inserted_id}")
-            
-            # 새 사용자 생성
+            # 사용자 정보만 저장 (지갑은 나중에 생성)
             logger.info("MongoDB에 사용자 정보 저장 중")
             user_data = {
                 "google_id": google_id,
                 "email": email,
                 "name": name,
-                "wallet_id": wallet_id,
+                "profile_image": idinfo.get('picture'),
+                "wallet_created": False,  # 지갑 미생성 상태
+                "welcome_bonus_given": False,  # 환영 보너스 미지급
                 "created_at": datetime.now(),
                 "updated_at": datetime.now()
             }
@@ -706,8 +696,9 @@ async def google_auth(request: GoogleTokenRequest):
                     "google_id": google_id,
                     "email": email,
                     "name": name,
-                    "wallet_id": wallet_id,
-                    "created_at": datetime.now().isoformat()
+                    "profile_image": idinfo.get('picture'),
+                    "wallet_created": False,
+                    "created_at": user_data["created_at"].isoformat()
                 },
                 "is_new_user": True
             }
@@ -720,3 +711,93 @@ async def google_auth(request: GoogleTokenRequest):
         logger.error(f"Exception - Google 인증 중 오류: {str(e)}")
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Google 인증 중 오류 발생: {str(e)}")
+
+@app.post("/auth/password")
+async def password_auth(request: PasswordLoginRequest):
+    """비밀번호 기반 인증 (한 소셜 아이디당 하나의 지갑만 허용)"""
+    try:
+        logger.info(f"=== Password Auth 시작: social_id={request.social_id} ===")
+        
+        # social_id로 사용자 조회 (MongoDB)
+        from bson import ObjectId
+        
+        user = None
+        try:
+            # 먼저 ObjectId로 검색 시도
+            if len(request.social_id) == 24:  # ObjectId 길이 체크
+                user = db.users.find_one({"_id": ObjectId(request.social_id)})
+                logger.info(f"ObjectId로 검색 시도: {request.social_id}")
+        except:
+            pass
+        
+        # ObjectId 검색이 실패하면 Google ID로 검색
+        if not user:
+            user = db.users.find_one({"google_id": request.social_id})
+            logger.info(f"Google ID로 검색 시도: {request.social_id}")
+        
+        if not user:
+            logger.error(f"사용자를 찾을 수 없음: {request.social_id}")
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
+        
+        # 지갑 생성 제한: 한 소셜 아이디당 하나의 지갑만 허용
+        if user.get("wallet_created"):
+            # 이미 지갑이 생성된 사용자 - 비밀번호 검증
+            stored_password = user.get("wallet_password")
+            logger.info("기존 지갑 확인 - 비밀번호 검증 중")
+            
+            if stored_password and stored_password != request.password:
+                logger.error("비밀번호 불일치")
+                raise HTTPException(status_code=401, detail="비밀번호가 일치하지 않습니다")
+            
+            # 비밀번호 검증 성공 - 기존 지갑 사용
+            logger.info("비밀번호 검증 성공 - 기존 지갑 로그인")
+            return {
+                "access_token": create_access_token(data={"sub": str(user["_id"])}),
+                "token_type": "bearer",
+                "user": {
+                    "id": str(user["_id"]),
+                    "email": user.get("email"),
+                    "name": user.get("name"),
+                    "wallet_address": user.get("wallet_address")
+                },
+                "message": "기존 지갑으로 로그인합니다.",
+                "is_existing_wallet": True
+            }
+        else:
+            # 새 지갑 생성 허용
+            logger.info("새 지갑 생성 시작")
+            update_data = {
+                "wallet_created": True,
+                "wallet_password": request.password,  # 비밀번호 저장 (복구용)
+                "updated_at": datetime.now()
+            }
+            
+            # 지갑 주소는 클라이언트에서만 관리 (서버에 저장하지 않음)
+            if request.wallet_address:
+                logger.info(f"클라이언트 지갑 주소 확인: {request.wallet_address}")
+            
+            db.users.update_one(
+                {"_id": user["_id"]}, 
+                {"$set": update_data}
+            )
+            logger.info("새 지갑 생성 완료")
+            
+            return {
+                "access_token": create_access_token(data={"sub": str(user["_id"])}),
+                "token_type": "bearer",
+                "user": {
+                    "id": str(user["_id"]),
+                    "email": user.get("email"),
+                    "name": user.get("name")
+                },
+                "message": "새 지갑이 생성됩니다.",
+                "is_existing_wallet": False,
+                "welcome_bonus_pending": True  # 환영 보너스 지급 중임을 알림
+            }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Password Auth 오류: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"로그인 처리 중 오류 발생: {str(e)}")
