@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   Container,
   Paper,
@@ -26,7 +25,6 @@ const generateDeterministicWallet = (socialId, password) => {
 };
 
 const LoginPage = () => {
-  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [passwordDialog, setPasswordDialog] = useState({
@@ -208,8 +206,8 @@ const LoginPage = () => {
       // 로딩 종료
       setLoading(false);
       
-      // 대시보드로 이동
-      navigate('/dashboard');
+      // 페이지 새로고침으로 AuthContext 업데이트
+      window.location.href = '/dashboard';
       
     } catch (error) {
       console.error('지갑 생성 오류:', error);
@@ -227,7 +225,7 @@ const LoginPage = () => {
   const handleMnemonicConfirm = () => {
     // 시드 구문 확인 후 다이얼로그 닫기
     setPasswordDialog({ open: false, social_id: '', isNewUser: false, mnemonic: '', showMnemonic: false });
-    navigate('/dashboard');
+    window.location.href = '/dashboard';
   };
 
 
