@@ -14,8 +14,6 @@ import {
   DialogActions
 } from '@mui/material';
 import { Google as GoogleIcon, Lock as LockIcon } from '@mui/icons-material';
-import { useAuth } from '../contexts/AuthContext';
-import { useNavigate } from 'react-router-dom';
 import Web3 from 'web3';
 
 // 결정론적 지갑 생성 함수
@@ -27,14 +25,8 @@ const generateDeterministicWallet = (socialId, password) => {
 };
 
 const LoginPage = () => {
-  const { login } = useAuth();
-  const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [passwordForm, setPasswordForm] = useState({
-    social_id: '',
-    password: ''
-  });
   const [passwordDialog, setPasswordDialog] = useState({
     open: false,
     social_id: '',
@@ -44,7 +36,7 @@ const LoginPage = () => {
   });
   const [passwordError, setPasswordError] = useState('');
 
-  const handleGoogleCallback = async (response) => {
+  const handleGoogleCallback = React.useCallback(async (response) => {
     setLoading(true);
     setError('');
     
@@ -95,7 +87,7 @@ const LoginPage = () => {
       setError(error.message || 'Google 로그인 중 오류가 발생했습니다.');
       setLoading(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     // Google Identity Services 초기화

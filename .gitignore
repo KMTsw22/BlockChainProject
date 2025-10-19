@@ -54,3 +54,4 @@ dist/
 # Temporary files
 *.tmp
 *.temp
+.env*.local

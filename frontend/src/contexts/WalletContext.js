@@ -72,6 +72,7 @@ export const WalletProvider = ({ children }) => {
   const web3 = useMemo(() => new Web3(SEPOLIA_RPC_URL), [SEPOLIA_RPC_URL]);
   
   // 트랜잭션 완료 대기 함수
+  // eslint-disable-next-line no-unused-vars
   const waitForTransactionCompletion = async (txHash, maxAttempts = 30) => {
     console.log('⏳ 트랜잭션 완료 대기 중...');
     
@@ -212,6 +213,7 @@ export const WalletProvider = ({ children }) => {
   }, [token, web3]);
 
   // 특정 주소의 잔액을 조회하는 함수
+  // eslint-disable-next-line no-unused-vars
   const fetchBalanceForAddress = useCallback(async (address) => {
     if (!token) {
       console.log('❌ 토큰이 없습니다');
@@ -373,7 +375,7 @@ export const WalletProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  }, [token, walletInfo, artContract, web3, CONTRACT_ADDRESS]);
+  }, [token, walletInfo, artContract, CONTRACT_ADDRESS]);
 
   const mintTokens = async (amount) => {
     try {

@@ -31,7 +31,6 @@ const WalletPage = () => {
     loading, 
     welcomeBonusStatus,
     fetchBalance, 
-    fetchWalletInfo,
     mintTokens, 
     transferTokens, 
     stakeTokens, 
