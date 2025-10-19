@@ -12,7 +12,7 @@ from web3 import Web3
 import json
 from google.auth.transport import requests
 from google.oauth2 import id_token
-from database import get_mongodb_database, test_connection
+from .database import get_mongodb_database, test_connection
 
 # FastAPI 앱 생성
 app = FastAPI(title="소셜 지갑 API", version="1.0.0")
