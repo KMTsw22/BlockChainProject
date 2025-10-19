@@ -36,21 +36,20 @@ const LoginPage = () => {
   });
   const [passwordError, setPasswordError] = useState('');
 
-  const handleGoogleCallback = React.useCallback(async (response) => {
-    setLoading(true);
-    setError('');
-    
+  // OAuth 콜백 처리
+  const handleOAuthCallback = async (code) => {
     try {
-      // 서버로 ID 토큰 전송하여 사용자 정보 조회
+      setLoading(true);
+      setError('');
+      console.log('🔵 OAuth code 받음, 백엔드로 전송 중...');
+      
       const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-      const result = await fetch(`${apiUrl}/auth/google`, {
+      const result = await fetch(`${apiUrl}/auth/google/callback`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          token: response.credential
-        })
+        body: JSON.stringify({ code })
       });
 
       if (!result.ok) {
@@ -58,92 +57,70 @@ const LoginPage = () => {
       }
 
       const data = await result.json();
+      console.log('🔍 백엔드 응답:', data);
+
+      // JWT 토큰 저장
+      localStorage.setItem('token', data.access_token);
       
-      // 디버깅: Google 로그인 응답 데이터 확인
-      console.log('🔍 Google 로그인 응답 데이터:', data);
-      console.log('🔍 data.user.id:', data.user.id);
-      console.log('🔍 data.user.id 타입:', typeof data.user.id);
-      
-      // 기존 사용자인지 확인 (wallet_created가 true면 기존 사용자)
-      const isExistingUser = data.user.wallet_created || false;
-      console.log('🔍 기존 사용자 여부:', isExistingUser);
-      
-      // Google ID 추출 (더 안전한 방법)
-      const socialId = data.user.id.includes('_') ? data.user.id.split('_')[1] : data.user.id;
-      console.log('🔍 추출된 social_id:', socialId);
-      
-      // 비밀번호 입력 다이얼로그 표시
+      // 신규/기존 사용자 판단
+      const isNewUser = data.is_new_user === true;
+      const socialId = String(data.user.id);
+
+      // 비밀번호 다이얼로그 표시
       setPasswordDialog({
         open: true,
-        social_id: socialId, // Google ID 추출
-        isNewUser: !isExistingUser, // 기존 사용자가 아니면 신규 사용자
+        social_id: socialId,
+        isNewUser: isNewUser,
         mnemonic: '',
         showMnemonic: false
       });
       setLoading(false);
       
     } catch (error) {
-      console.error('Google 로그인 오류:', error);
+      console.error('❌ OAuth 콜백 오류:', error);
       setError(error.message || 'Google 로그인 중 오류가 발생했습니다.');
       setLoading(false);
     }
-  }, []);
+  };
 
   
+  // URL에서 OAuth code 확인
   useEffect(() => {
-    // Google Identity Services 초기화 (모바일 지원)
-    if (window.google) {
-      try {
-        window.google.accounts.id.initialize({
-          client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID || '642921295-hbu979qt4a2ndq1ucpf4j8v83kmfs8mk.apps.googleusercontent.com',
-          callback: handleGoogleCallback,
-          auto_select: false,
-          cancel_on_tap_outside: true,
-          ux_mode: 'popup', // 모바일/PC 모두 팝업 모드
-          context: 'signin'
-        });
-        console.log('✅ Google Identity Services 초기화 완료');
-      } catch (error) {
-        console.error('❌ Google 초기화 실패:', error);
-      }
-    } else {
-      console.warn('⚠️ Google Identity Services가 로드되지 않았습니다');
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    
+    if (code) {
+      console.log('🔵 OAuth code 발견:', code);
+      // URL 정리
+      window.history.replaceState({}, document.title, window.location.pathname);
+      // 콜백 처리
+      handleOAuthCallback(code);
     }
-  }, [handleGoogleCallback]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleGoogleLogin = () => {
-    console.log('🔵 Google 로그인 버튼 클릭됨');
+    console.log('🔵 Google OAuth 로그인 시작');
     
-    if (!process.env.REACT_APP_GOOGLE_CLIENT_ID) {
-      setError('Google OAuth 클라이언트 ID가 설정되지 않았습니다.');
-      return;
-    }
+    const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID || '642921295-hbu979qt4a2ndq1ucpf4j8v83kmfs8mk.apps.googleusercontent.com';
+    const redirectUri = window.location.origin + window.location.pathname;
+    const scope = 'openid email profile';
+    const state = btoa(JSON.stringify({ timestamp: Date.now() }));
     
-    if (!window.google) {
-      setError('Google 서비스가 로드되지 않았습니다. 페이지를 새로고침해주세요.');
-      return;
-    }
-
-    try {
-      setLoading(true);
-      console.log('🔵 Google prompt() 호출 시작');
-      
-      // Google One Tap 시도
-      window.google.accounts.id.prompt((notification) => {
-        console.log('🔵 Notification:', notification);
-        
-        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-          console.warn('⚠️ Google One Tap 사용 불가');
-          setLoading(false);
-          // 팝업 차단 또는 FedCM 비활성화
-          setError('❌ Google 로그인이 차단되었습니다.\n\n해결 방법:\n1. 브라우저 주소창 왼쪽 자물쇠 아이콘 클릭\n2. "타사 로그인" 또는 "쿠키" 허용\n3. 페이지 새로고침 후 재시도\n\n또는 PC에서 시도해주세요.');
-        }
-      });
-    } catch (error) {
-      console.error('❌ Google 로그인 오류:', error);
-      setError('Google 로그인 중 오류가 발생했습니다: ' + error.message);
-      setLoading(false);
-    }
+    // OAuth 2.0 Authorization URL 생성
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+      `client_id=${encodeURIComponent(clientId)}&` +
+      `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+      `response_type=code&` +
+      `scope=${encodeURIComponent(scope)}&` +
+      `state=${encodeURIComponent(state)}&` +
+      `access_type=online&` +
+      `prompt=select_account`;
+    
+    console.log('🔵 Redirect URI:', redirectUri);
+    console.log('🔵 OAuth URL로 리다이렉트');
+    
+    // Google OAuth 페이지로 리다이렉트
+    window.location.href = authUrl;
   };
 
 
