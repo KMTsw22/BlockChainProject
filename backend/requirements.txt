@@ -9,3 +9,9 @@ httpx==0.25.2
 google-auth==2.23.4
 google-auth-oauthlib==1.1.0
 google-auth-httplib2==0.1.1
+pymongo==4.6.0
+motor==3.3.2
+
+
+
+//py -m pip install eth-account eth-abi eth-hash eth-typing eth-utils hexbytes aiohttp websockets pyunormalize aiohappyeyeballs aiosignal attrs frozenlist multidict propcache yarl parsimonious bitarray eth-keyfile eth-keys eth-rlp rlp pycryptodome cytoolz toolz types-requests

@@ -12,10 +12,12 @@ import {
 } from '@mui/material';
 import {
   AccountBalanceWallet as WalletIcon,
+  AccountBalanceWallet as AccountBalanceWalletIcon,
   TrendingUp as TrendingUpIcon,
   Security as SecurityIcon,
   MonetizationOn as TokenIcon,
-  Logout as LogoutIcon
+  Logout as LogoutIcon,
+  Refresh as RefreshIcon
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
@@ -23,7 +25,7 @@ import { useNavigate } from 'react-router-dom';
 
 const DashboardPage = () => {
   const { user, logout } = useAuth();
-  const { balance, walletInfo } = useWallet();
+  const { balance, walletInfo, fetchBalance, loading, welcomeBonusStatus } = useWallet();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -32,100 +34,243 @@ const DashboardPage = () => {
   };
 
   const formatBalance = (balance) => {
-    return (parseFloat(balance) / Math.pow(10, 5)).toFixed(2);
+    // balance가 이미 포맷된 문자열이므로 그대로 반환
+    return balance || '0.00';
+  };
+
+  // 새로고침 함수
+  const handleRefresh = async () => {
+    try {
+      console.log('🔄 지갑 정보 새로고침 중...');
+      await fetchBalance();
+      console.log('✅ 지갑 정보 새로고침 완료');
+    } catch (error) {
+      console.error('❌ 새로고침 실패:', error);
+    }
   };
 
   return (
-    <Container maxWidth="lg" sx={{ py: 4 }}>
-      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <Box>
-          <Typography variant="h4" component="h1" gutterBottom>
-            🎉 환영합니다, {user?.name}님!
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
-            {user?.provider?.toUpperCase()} 계정으로 연결된 지갑이 성공적으로 생성되었습니다.
-          </Typography>
+    <Box sx={{ 
+      minHeight: '100vh', 
+      background: 'linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 50%, #1a1a1a 100%)',
+      py: 4
+    }}>
+      <Container maxWidth="lg">
+        <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <Box>
+            <Typography variant="h4" component="h1" gutterBottom sx={{ color: 'white', fontWeight: 'bold' }}>
+              🎉 환영합니다, {user?.name}님!
+            </Typography>
+            <Typography variant="body1" sx={{ color: 'rgba(255,255,255,0.8)' }}>
+              블록체인 지갑에 오신 것을 환영합니다
+            </Typography>
+          </Box>
+          계정 토큰
+          지갑
+          <Button
+            variant="contained"
+            color="error"
+            startIcon={<LogoutIcon />}
+            onClick={handleLogout}
+            sx={{ 
+              ml: 2,
+              borderRadius: 2,
+              textTransform: 'none',
+              fontWeight: 'bold'
+            }}
+          >
+            로그아웃
+          </Button>
         </Box>
-        <Button
-          variant="outlined"
-          color="error"
-          startIcon={<LogoutIcon />}
-          onClick={handleLogout}
-          sx={{ ml: 2 }}
-        >
-          로그아웃
-        </Button>
-      </Box>
 
       <Grid container spacing={3}>
-        {/* 지갑 정보 카드 */}
+        {/* 왼쪽 컬럼: 계정 정보 + 지갑 정보 */}
         <Grid item xs={12} md={6}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <WalletIcon color="primary" sx={{ mr: 1 }} />
-                <Typography variant="h6">지갑 정보</Typography>
-              </Box>
-              
-              <Typography variant="body2" color="text.secondary" gutterBottom>
-                지갑 주소
-              </Typography>
-              <Typography 
-                variant="body1" 
-                sx={{ 
-                  fontFamily: 'monospace', 
-                  backgroundColor: '#f5f5f5', 
-                  padding: 1, 
-                  borderRadius: 1,
-                  wordBreak: 'break-all'
-                }}
-              >
-                {walletInfo?.wallet?.address || '로딩 중...'}
-              </Typography>
-              
-              <Box sx={{ mt: 2 }}>
-                <Chip 
-                  label={`${user?.provider?.toUpperCase()} 계정`} 
-                  color="primary" 
-                  size="small" 
-                />
-              </Box>
-            </CardContent>
-          </Card>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+            {/* 계정 정보 카드 */}
+            <Card sx={{ 
+              borderRadius: 3,
+              boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+              backdropFilter: 'blur(10px)',
+              background: 'rgba(45,45,45,0.8)',
+              border: '1px solid rgba(255,255,255,0.1)'
+            }}>
+              <CardContent sx={{ p: 3 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                  <Box sx={{ 
+                    p: 1.5, 
+                    borderRadius: 2, 
+                    background: 'linear-gradient(45deg, #667eea, #764ba2)',
+                    mr: 2
+                  }}>
+                    <AccountBalanceWalletIcon sx={{ color: 'white' }} />
+                  </Box>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'white' }}>
+                    계정 정보
+                  </Typography>
+                </Box>
+                
+                <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap' }}>
+                  <Box sx={{ flex: 1, minWidth: 200, p: 2, borderRadius: 2, backgroundColor: '#2a2a2a', border: '1px solid #444' }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      이메일
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontWeight: 'bold', color: '#ffffff', fontSize: '0.9rem', wordBreak: 'break-all' }}>
+                      {user?.email || '로딩 중...'}
+                    </Typography>
+                  </Box>
+                  
+                  <Box sx={{ flex: 1, minWidth: 200, p: 2, borderRadius: 2, backgroundColor: '#2a2a2a', border: '1px solid #444' }}>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                      소셜 계정
+                    </Typography>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1 }}>
+                      <Chip 
+                        label={`${user?.provider?.toUpperCase() || 'GOOGLE'} 계정`} 
+                        color="primary" 
+                        size="small"
+                        sx={{ 
+                          borderRadius: 2,
+                          fontWeight: 'bold',
+                          background: 'linear-gradient(45deg, #667eea, #764ba2)'
+                        }}
+                      />
+                    </Box>
+                  </Box>
+                </Box>
+              </CardContent>
+            </Card>
+
+            {/* 지갑 정보 카드 */}
+            <Card sx={{ 
+              borderRadius: 3,
+              boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+              backdropFilter: 'blur(10px)',
+              background: 'rgba(45,45,45,0.8)',
+              border: '1px solid rgba(255,255,255,0.1)'
+            }}>
+              <CardContent sx={{ p: 3 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                  <Box sx={{ 
+                    p: 1.5, 
+                    borderRadius: 2, 
+                    background: 'linear-gradient(45deg, #667eea, #764ba2)',
+                    mr: 2
+                  }}>
+                    <WalletIcon sx={{ color: 'white' }} />
+                  </Box>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'white' }}>
+                    지갑 정보
+                  </Typography>
+                </Box>
+                
+                <Typography variant="body2" color="text.secondary" gutterBottom sx={{ mb: 1, fontWeight: 'medium' }}>
+                  지갑 주소
+                </Typography>
+                <Typography 
+                  variant="body1" 
+                  sx={{ 
+                    fontFamily: 'monospace', 
+                    backgroundColor: '#2a2a2a', 
+                    padding: 2, 
+                    borderRadius: 2,
+                    wordBreak: 'break-all',
+                    color: '#ffffff',
+                    border: '1px solid #444',
+                    fontSize: '0.9rem'
+                  }}
+                >
+                  {walletInfo?.address || '로딩 중...'}
+                </Typography>
+              </CardContent>
+            </Card>
+          </Box>
         </Grid>
 
-        {/* 토큰 잔액 카드 */}
+        {/* 오른쪽 컬럼: 토큰 잔액 */}
         <Grid item xs={12} md={6}>
-          <Card>
-            <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <TokenIcon color="primary" sx={{ mr: 1 }} />
-                <Typography variant="h6">토큰 잔액</Typography>
+          <Card sx={{ 
+            borderRadius: 3,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+            backdropFilter: 'blur(10px)',
+            background: 'rgba(45,45,45,0.8)',
+            border: '1px solid rgba(255,255,255,0.2)'
+          }}>
+            <CardContent sx={{ p: 3 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <Box sx={{ 
+                    p: 1.5, 
+                    borderRadius: 2, 
+                    background: 'linear-gradient(45deg, #667eea, #764ba2)',
+                    mr: 2
+                  }}>
+                    <TokenIcon sx={{ color: 'white' }} />
+                  </Box>
+                  <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'white' }}>
+                    토큰 잔액
+                  </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  {welcomeBonusStatus?.pending === true && welcomeBonusStatus?.message && (
+                    <Typography 
+                      variant="caption" 
+                      sx={{ 
+                        color: '#4fc3f7', 
+                        fontWeight: 'bold',
+                        fontSize: '0.75rem',
+                        backgroundColor: 'rgba(79, 195, 247, 0.1)',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        border: '1px solid #4fc3f7'
+                      }}
+                    >
+                      {welcomeBonusStatus.message}
+                    </Typography>
+                  )}
+                  <Button
+                    variant="outlined"
+                    startIcon={<RefreshIcon />}
+                    onClick={handleRefresh}
+                    disabled={loading}
+                    size="small"
+                    sx={{
+                      color: 'white',
+                      borderColor: 'rgba(255,255,255,0.3)',
+                      '&:hover': {
+                        borderColor: 'rgba(255,255,255,0.5)',
+                        backgroundColor: 'rgba(255,255,255,0.1)'
+                      }
+                    }}
+                  >
+                    새로고침
+                  </Button>
+                </Box>
               </Box>
               
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="body2" color="text.secondary">
+              <Box sx={{ mb: 3, p: 2, borderRadius: 2, background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white' }}>
+                <Typography variant="body2" sx={{ opacity: 0.9, mb: 1 }}>
                   보유 토큰
                 </Typography>
-                <Typography variant="h5" color="primary">
+                <Typography variant="h4" sx={{ fontWeight: 'bold' }}>
                   {formatBalance(balance.balance)} ART
                 </Typography>
               </Box>
               
-              <Box sx={{ mb: 2 }}>
-                <Typography variant="body2" color="text.secondary">
+              <Box sx={{ mb: 2, p: 2, borderRadius: 2, backgroundColor: '#2a2a2a', border: '1px solid #444' }}>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                   스테이킹된 토큰
                 </Typography>
-                <Typography variant="h6">
+                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#ffffff' }}>
                   {formatBalance(balance.staked_amount)} ART
                 </Typography>
               </Box>
               
-              <Box>
-                <Typography variant="body2" color="text.secondary">
+              <Box sx={{ p: 2, borderRadius: 2, backgroundColor: '#d4edda', border: '1px solid #c3e6cb' }}>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                   대기 중인 보상
                 </Typography>
-                <Typography variant="h6" color="success.main">
+                <Typography variant="h6" sx={{ fontWeight: 'bold', color: '#155724' }}>
                   {formatBalance(balance.pending_rewards)} ART
                 </Typography>
               </Box>
@@ -133,11 +278,22 @@ const DashboardPage = () => {
           </Card>
         </Grid>
 
+
+
+
+
+
         {/* 빠른 액션 카드 */}
         <Grid item xs={12}>
-          <Card>
-            <CardContent>
-              <Typography variant="h6" gutterBottom>
+          <Card sx={{ 
+            borderRadius: 3,
+            boxShadow: '0 8px 32px rgba(0,0,0,0.1)',
+            backdropFilter: 'blur(10px)',
+            background: 'rgba(45,45,45,0.8)',
+            border: '1px solid rgba(255,255,255,0.2)'
+          }}>
+            <CardContent sx={{ p: 3 }}>
+              <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', color: '#333', mb: 3 }}>
                 🚀 빠른 액션
               </Typography>
               
@@ -148,6 +304,16 @@ const DashboardPage = () => {
                     fullWidth
                     onClick={() => navigate('/wallet')}
                     startIcon={<WalletIcon />}
+                    sx={{ 
+                      py: 2,
+                      borderRadius: 2,
+                      textTransform: 'none',
+                      fontWeight: 'bold',
+                      background: 'linear-gradient(45deg, #667eea, #764ba2)',
+                      '&:hover': {
+                        background: 'linear-gradient(45deg, #5a6fd8, #6a4190)'
+                      }
+                    }}
                   >
                     지갑 관리
                   </Button>
@@ -159,6 +325,12 @@ const DashboardPage = () => {
                     fullWidth
                     disabled
                     startIcon={<TrendingUpIcon />}
+                    sx={{ 
+                      py: 2,
+                      borderRadius: 2,
+                      textTransform: 'none',
+                      fontWeight: 'bold'
+                    }}
                   >
                     토큰 발행
                   </Button>
@@ -170,6 +342,12 @@ const DashboardPage = () => {
                     fullWidth
                     disabled
                     startIcon={<SecurityIcon />}
+                    sx={{ 
+                      py: 2,
+                      borderRadius: 2,
+                      textTransform: 'none',
+                      fontWeight: 'bold'
+                    }}
                   >
                     스테이킹
                   </Button>
@@ -181,6 +359,12 @@ const DashboardPage = () => {
                     fullWidth
                     disabled
                     startIcon={<TokenIcon />}
+                    sx={{ 
+                      py: 2,
+                      borderRadius: 2,
+                      textTransform: 'none',
+                      fontWeight: 'bold'
+                    }}
                   >
                     토큰 전송
                   </Button>
@@ -237,7 +421,8 @@ const DashboardPage = () => {
           </Paper>
         </Grid>
       </Grid>
-    </Container>
+      </Container>
+    </Box>
   );
 };
 

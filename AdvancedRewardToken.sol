@@ -1,18 +1,14 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.0;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 /**
  * @title AdvancedRewardToken
- * @dev 고급 기능이 포함된 리워드 토큰 컨트랙트
- * @notice 스테이킹, 보상 분배, 시간 기반 보상 기능 포함
+ * @dev 완전한 기능을 가진 리워드 토큰 컨트랙트
  */
-contract AdvancedRewardToken is ERC20, ERC20Permit, Ownable, Pausable, ReentrancyGuard {
+contract AdvancedRewardToken is ERC20, Ownable {
     
     // 기본 설정
     uint256 public constant MAX_SUPPLY = 100_000_000 * 10**5;
@@ -39,6 +35,10 @@ contract AdvancedRewardToken is ERC20, ERC20Permit, Ownable, Pausable, Reentranc
     uint256 public totalStaked;
     uint256 public totalRewardsDistributed;
     
+    // 신규 사용자 보상
+    mapping(address => bool) public hasReceivedWelcomeBonus;
+    uint256 public constant WELCOME_BONUS = 100 * 10**5; // 100토큰 (5자리 소수점)
+    
     // 이벤트 정의
     event TokensMinted(address indexed to, uint256 amount);
     event TokensBurned(address indexed from, uint256 amount);
@@ -46,6 +46,7 @@ contract AdvancedRewardToken is ERC20, ERC20Permit, Ownable, Pausable, Reentranc
     event Unstaked(address indexed user, uint256 amount, uint256 timestamp);
     event RewardsClaimed(address indexed user, uint256 amount, uint256 timestamp);
     event RewardsDistributed(uint256 totalAmount, uint256 timestamp);
+    event WelcomeBonusReceived(address indexed user, uint256 amount, uint256 timestamp);
     
     /**
      * @dev 컨트랙트 생성자
@@ -53,7 +54,7 @@ contract AdvancedRewardToken is ERC20, ERC20Permit, Ownable, Pausable, Reentranc
     constructor(
         string memory name,
         string memory symbol
-    ) ERC20(name, symbol) ERC20Permit(name) Ownable(msg.sender) {
+    ) ERC20(name, symbol) Ownable(msg.sender) {
         // 초기 설정
     }
     
@@ -67,7 +68,7 @@ contract AdvancedRewardToken is ERC20, ERC20Permit, Ownable, Pausable, Reentranc
     /**
      * @dev 토큰 발행 (소유자만)
      */
-    function mint(address to, uint256 amount) public onlyOwner whenNotPaused nonReentrant {
+    function mint(address to, uint256 amount) public onlyOwner {
         require(to != address(0), "AdvancedRewardToken: mint to the zero address");
         require(amount > 0, "AdvancedRewardToken: amount must be greater than 0");
         require(_totalMinted + amount <= MAX_SUPPLY, "AdvancedRewardToken: exceeds max supply");
@@ -81,7 +82,7 @@ contract AdvancedRewardToken is ERC20, ERC20Permit, Ownable, Pausable, Reentranc
     /**
      * @dev 토큰 소각
      */
-    function burn(uint256 amount) public whenNotPaused nonReentrant {
+    function burn(uint256 amount) public {
         require(amount > 0, "AdvancedRewardToken: amount must be greater than 0");
         require(balanceOf(msg.sender) >= amount, "AdvancedRewardToken: insufficient balance");
         
@@ -94,7 +95,7 @@ contract AdvancedRewardToken is ERC20, ERC20Permit, Ownable, Pausable, Reentranc
     /**
      * @dev 토큰 스테이킹
      */
-    function stake(uint256 amount) public whenNotPaused nonReentrant {
+    function stake(uint256 amount) public {
         require(amount >= MIN_STAKE_AMOUNT, "AdvancedRewardToken: insufficient stake amount");
         require(balanceOf(msg.sender) >= amount, "AdvancedRewardToken: insufficient balance");
         
@@ -120,7 +121,7 @@ contract AdvancedRewardToken is ERC20, ERC20Permit, Ownable, Pausable, Reentranc
     /**
      * @dev 스테이킹 해제
      */
-    function unstake(uint256 amount) public whenNotPaused nonReentrant {
+    function unstake(uint256 amount) public {
         require(stakes[msg.sender].isActive, "AdvancedRewardToken: no active stake");
         require(amount <= stakes[msg.sender].amount, "AdvancedRewardToken: insufficient staked amount");
         require(block.timestamp >= stakes[msg.sender].startTime + STAKING_LOCK_PERIOD, "AdvancedRewardToken: stake is locked");
@@ -147,7 +148,7 @@ contract AdvancedRewardToken is ERC20, ERC20Permit, Ownable, Pausable, Reentranc
     /**
      * @dev 보상 청구
      */
-    function claimRewards() public whenNotPaused nonReentrant {
+    function claimRewards() public {
         require(stakes[msg.sender].isActive, "AdvancedRewardToken: no active stake");
         
         _calculateRewards(msg.sender);
@@ -192,7 +193,7 @@ contract AdvancedRewardToken is ERC20, ERC20Permit, Ownable, Pausable, Reentranc
     /**
      * @dev 일괄 보상 분배 (소유자만)
      */
-    function distributeRewards() public onlyOwner whenNotPaused {
+    function distributeRewards() public onlyOwner {
         // 모든 활성 스테이커에게 보상 계산 및 지급
         // 실제 구현에서는 이벤트를 통해 프론트엔드에서 처리
         
@@ -228,20 +229,6 @@ contract AdvancedRewardToken is ERC20, ERC20Permit, Ownable, Pausable, Reentranc
     }
     
     /**
-     * @dev 컨트랙트 일시정지
-     */
-    function pause() public onlyOwner {
-        _pause();
-    }
-    
-    /**
-     * @dev 컨트랙트 재개
-     */
-    function unpause() public onlyOwner {
-        _unpause();
-    }
-    
-    /**
      * @dev 현재까지 발행된 토큰 총량
      */
     function totalMinted() public view returns (uint256) {
@@ -269,7 +256,37 @@ contract AdvancedRewardToken is ERC20, ERC20Permit, Ownable, Pausable, Reentranc
         address from,
         address to,
         uint256 value
-    ) internal override whenNotPaused {
+    ) internal override {
+        // 자동 보너스 지급 로직 제거 - 서버에서만 관리
         super._update(from, to, value);
+    }
+    
+    /**
+     * @dev 신규 사용자 환영 보너스 지급 (내부 함수)
+     */
+    function _giveWelcomeBonus(address user) internal {
+        require(!hasReceivedWelcomeBonus[user], "AdvancedRewardToken: already received welcome bonus");
+        require(_totalMinted + WELCOME_BONUS <= MAX_SUPPLY, "AdvancedRewardToken: exceeds max supply");
+        
+        hasReceivedWelcomeBonus[user] = true;
+        _totalMinted += WELCOME_BONUS;
+        _mint(user, WELCOME_BONUS);
+        
+        emit WelcomeBonusReceived(user, WELCOME_BONUS, block.timestamp);
+    }
+    
+    /**
+     * @dev 관리자 전용 토큰 발행 함수 (환영 보너스용)
+     * @param to 받을 주소
+     * @param amount 발행할 토큰 양
+     */
+    function mintTo(address to, uint256 amount) public onlyOwner {
+        require(_totalMinted + amount <= MAX_SUPPLY, "AdvancedRewardToken: exceeds max supply");
+        require(amount > 0, "AdvancedRewardToken: amount must be greater than 0");
+        
+        _totalMinted += amount;
+        _mint(to, amount);
+        
+        emit TokensMinted(to, amount);
     }
 }

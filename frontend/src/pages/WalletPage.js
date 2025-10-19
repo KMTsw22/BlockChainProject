@@ -29,12 +29,15 @@ const WalletPage = () => {
     balance, 
     walletInfo, 
     loading, 
+    welcomeBonusStatus,
     fetchBalance, 
+    fetchWalletInfo,
     mintTokens, 
     transferTokens, 
     stakeTokens, 
     claimRewards 
   } = useWallet();
+  
   const [mintAmount, setMintAmount] = useState('');
   const [transferTo, setTransferTo] = useState('');
   const [transferAmount, setTransferAmount] = useState('');
@@ -45,7 +48,21 @@ const WalletPage = () => {
   const [messageType, setMessageType] = useState('info');
 
   const formatBalance = (balance) => {
-    return (parseFloat(balance) / Math.pow(10, 5)).toFixed(2);
+    // balance가 이미 포맷된 문자열이므로 그대로 반환
+    return balance || '0.00';
+  };
+
+  // 새로고침 함수
+  const handleRefresh = async () => {
+    try {
+      console.log('🔄 지갑 정보 새로고침 중...');
+      await fetchBalance();
+      console.log('✅ 지갑 정보 새로고침 완료');
+    } catch (error) {
+      console.error('❌ 새로고침 실패:', error);
+      setMessage('새로고침에 실패했습니다.');
+      setMessageType('error');
+    }
   };
 
   const showMessage = (msg, type = 'info') => {
@@ -238,7 +255,10 @@ const WalletPage = () => {
                   mb: 2
                 }}
               >
-                {walletInfo?.wallet?.address || '로딩 중...'}
+                {(() => {
+                  console.log('🔍 WalletPage walletInfo:', walletInfo);
+                  return walletInfo?.address || '로딩 중...';
+                })()}
               </Typography>
               
               <Button
@@ -258,9 +278,38 @@ const WalletPage = () => {
         <Grid item xs={12} md={6}>
           <Card>
             <CardContent>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <TokenIcon color="primary" sx={{ mr: 1 }} />
-                <Typography variant="h6">토큰 잔액</Typography>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                  <TokenIcon color="primary" sx={{ mr: 1 }} />
+                  <Typography variant="h6">토큰 잔액</Typography>
+                </Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  {welcomeBonusStatus?.pending === true && welcomeBonusStatus?.message && (
+                    <Typography 
+                      variant="caption" 
+                      sx={{ 
+                        color: 'primary.main', 
+                        fontWeight: 'bold',
+                        fontSize: '0.75rem',
+                        backgroundColor: 'rgba(25, 118, 210, 0.1)',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        border: '1px solid #1976d2'
+                      }}
+                    >
+                      {welcomeBonusStatus.message}
+                    </Typography>
+                  )}
+                  <Button
+                    variant="outlined"
+                    startIcon={<RefreshIcon />}
+                    onClick={handleRefresh}
+                    disabled={loading}
+                    size="small"
+                  >
+                    새로고침
+                  </Button>
+                </Box>
               </Box>
               
               <Box sx={{ mb: 2 }}>
@@ -268,7 +317,11 @@ const WalletPage = () => {
                   보유 토큰
                 </Typography>
                 <Typography variant="h5" color="primary">
-                  {formatBalance(balance.balance)} ART
+                  {(() => {
+                    console.log('🔍 WalletPage balance:', balance);
+                    console.log('🔍 WalletPage balance.balance:', balance.balance);
+                    return formatBalance(balance.balance);
+                  })()} ART
                 </Typography>
               </Box>
               
