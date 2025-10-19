@@ -83,9 +83,24 @@ const LoginPage = () => {
     }
   };
 
+  // 인앱 브라우저 감지 함수 (useEffect보다 먼저 정의)
+  const isInAppBrowser = () => {
+    const ua = navigator.userAgent || navigator.vendor || window.opera;
+    return (
+      ua.includes('KAKAOTALK') || 
+      ua.includes('FBAN') || 
+      ua.includes('FBAV') || 
+      ua.includes('Instagram')
+    );
+  };
   
-  // URL에서 OAuth code 확인
+  // URL에서 OAuth code 확인 및 인앱 브라우저 경고
   useEffect(() => {
+    // 인앱 브라우저 경고
+    if (isInAppBrowser()) {
+      setError('⚠️ 카카오톡/SNS 인앱 브라우저에서는 Google 로그인이 지원되지 않습니다.\n\n오른쪽 상단 [...] 메뉴에서 "외부 브라우저에서 열기"를 선택해주세요.');
+    }
+    
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get('code');
     
@@ -100,6 +115,12 @@ const LoginPage = () => {
 
   const handleGoogleLogin = () => {
     console.log('🔵 Google OAuth 로그인 시작');
+    
+    // 인앱 브라우저 체크
+    if (isInAppBrowser()) {
+      setError('⚠️ 카카오톡/SNS 인앱 브라우저에서는 Google 로그인이 지원되지 않습니다.\n\n오른쪽 상단 [...] 메뉴에서 "외부 브라우저에서 열기"를 선택해주세요.');
+      return;
+    }
     
     const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID || '642921295-hbu979qt4a2ndq1ucpf4j8v83kmfs8mk.apps.googleusercontent.com';
     const redirectUri = window.location.origin + '/login'; // /login으로 콜백
