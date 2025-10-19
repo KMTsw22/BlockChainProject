@@ -12,6 +12,7 @@ from web3 import Web3
 import json
 from google.auth.transport import requests
 from google.oauth2 import id_token
+import httpx
 import logging
 import traceback
 
