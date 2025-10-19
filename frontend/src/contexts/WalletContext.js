@@ -13,7 +13,7 @@ export const useWallet = () => {
 };
 
 export const WalletProvider = ({ children }) => {
-  const { token, user } = useAuth();
+  const { token } = useAuth();
   const [walletInfo, setWalletInfo] = useState(null);
   const [balance, setBalance] = useState({
     balance: '0',
@@ -69,7 +69,7 @@ export const WalletProvider = ({ children }) => {
   const CONTRACT_ADDRESS = process.env.REACT_APP_CONTRACT_ADDRESS || '0x96850830c5c5c62A151Cc41f14558F76ab2Bb55f'; // AdvancedRewardToken 스마트 컨트랙트
   
   // Web3 인스턴스 생성 (useMemo로 최적화)
-  const web3 = useMemo(() => new Web3(SEPOLIA_RPC_URL), []);
+  const web3 = useMemo(() => new Web3(SEPOLIA_RPC_URL), [SEPOLIA_RPC_URL]);
   
   // 트랜잭션 완료 대기 함수
   const waitForTransactionCompletion = async (txHash, maxAttempts = 30) => {
@@ -121,7 +121,7 @@ export const WalletProvider = ({ children }) => {
     ];
     
     return new web3.eth.Contract(ART_ABI, CONTRACT_ADDRESS);
-  }, [web3]);
+  }, [web3, CONTRACT_ADDRESS]);
 
   const fetchWalletInfo = useCallback(async () => {
     if (!token) return;
@@ -187,7 +187,7 @@ export const WalletProvider = ({ children }) => {
             });
             
             if (response.ok) {
-              const result = await response.json();
+              await response.json();
               
               // 환영 보너스 지급 완료 상태를 localStorage에만 저장 (UI 업데이트 없음)
               const completedStatus = {
@@ -210,51 +210,6 @@ export const WalletProvider = ({ children }) => {
       setLoading(false);
     }
   }, [token, web3]);
-
-
-  // 환영 보너스 지급 함수 (백엔드 API 호출)
-  const giveWelcomeBonus = async (userAddress, privateKey) => {
-    try {
-      console.log('🎁 환영 보너스 지급 시도:', userAddress);
-      console.log('🔍 giveWelcomeBonus 호출 스택:', new Error().stack);
-      
-      // 백엔드 API 호출
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiUrl}/wallet/welcome-bonus`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ address: userAddress })
-      });
-      
-      if (response.ok) {
-        const result = await response.json();
-        console.log('✅ 환영 보너스 지급 성공:', result);
-        
-        // 환영 보너스 지급 후 잔액 새로고침 (트랜잭션 완료 대기)
-        console.log('🔄 잔액 새로고침 중...');
-        console.log(`🔗 트랜잭션 해시: ${result.transaction_hash}`);
-        console.log(`🔗 트랜잭션 확인: https://sepolia.etherscan.io/tx/${result.transaction_hash}`);
-        
-        // 트랜잭션 완료를 기다린 후 잔액 새로고침
-        await waitForTransactionCompletion(result.transaction_hash);
-        await fetchBalanceForAddress(userAddress);
-        
-        // 사용자에게 성공 메시지 표시
-        console.log('🎉 환영 보너스 100 ART 토큰이 지급되었습니다!');
-        
-        return result;
-      } else {
-        const error = await response.json();
-        console.error('❌ 환영 보너스 지급 실패:', error);
-      }
-      
-    } catch (error) {
-      console.error('⚠️ 환영 보너스 지급 실패:', error);
-    }
-  };
 
   // 특정 주소의 잔액을 조회하는 함수
   const fetchBalanceForAddress = useCallback(async (address) => {
@@ -352,7 +307,7 @@ export const WalletProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  }, [token, web3]);
+  }, [token, web3, CONTRACT_ADDRESS]);
 
   const fetchBalance = useCallback(async () => {
     if (!token) {
@@ -418,7 +373,7 @@ export const WalletProvider = ({ children }) => {
     } finally {
       setLoading(false);
     }
-  }, [token, walletInfo, artContract, web3]);
+  }, [token, walletInfo, artContract, web3, CONTRACT_ADDRESS]);
 
   const mintTokens = async (amount) => {
     try {
