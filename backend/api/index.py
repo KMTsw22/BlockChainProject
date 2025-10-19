@@ -681,6 +681,3 @@ async def google_auth(request: GoogleTokenRequest):
         raise HTTPException(status_code=400, detail=f"유효하지 않은 Google 토큰: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Google 인증 중 오류 발생: {str(e)}")
-
-# Vercel 서버리스 함수 핸들러
-handler = app
