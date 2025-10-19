@@ -776,10 +776,15 @@ async def password_auth(request: PasswordLoginRequest):
             if request.wallet_address:
                 logger.info(f"클라이언트 지갑 주소 확인: {request.wallet_address}")
             
-            db.users.update_one(
+            result = db.users.update_one(
                 {"_id": user["_id"]}, 
                 {"$set": update_data}
             )
+            logger.info(f"MongoDB 업데이트 완료: matched={result.matched_count}, modified={result.modified_count}")
+            
+            # 저장 확인
+            updated_user = db.users.find_one({"_id": user["_id"]})
+            logger.info(f"저장 확인 - wallet_created: {updated_user.get('wallet_created')}")
             logger.info("새 지갑 생성 완료")
             
             return {
