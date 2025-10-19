@@ -102,7 +102,7 @@ const LoginPage = () => {
     console.log('🔵 Google OAuth 로그인 시작');
     
     const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID || '642921295-hbu979qt4a2ndq1ucpf4j8v83kmfs8mk.apps.googleusercontent.com';
-    const redirectUri = window.location.origin; // 루트 URL만 사용
+    const redirectUri = window.location.origin + '/login'; // /login으로 콜백
     const scope = 'openid email profile';
     const state = btoa(JSON.stringify({ timestamp: Date.now(), returnPath: window.location.pathname }));
     
