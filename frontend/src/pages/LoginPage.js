@@ -92,50 +92,62 @@ const LoginPage = () => {
   useEffect(() => {
     // Google Identity Services 초기화 (모바일 지원)
     if (window.google) {
-      window.google.accounts.id.initialize({
-        client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID || '642921295-hbu979qt4a2ndq1ucpf4j8v83kmfs8mk.apps.googleusercontent.com',
-        callback: handleGoogleCallback,
-        auto_select: false,
-        cancel_on_tap_outside: true
-      });
-      
-      // 숨겨진 Google 버튼 렌더링 (모바일 지원)
-      const hiddenButtonDiv = document.getElementById('hiddenGoogleButton');
-      if (hiddenButtonDiv) {
-        window.google.accounts.id.renderButton(
-          hiddenButtonDiv,
-          {
-            theme: 'filled_blue',
-            size: 'large',
-            width: 250
-          }
-        );
+      try {
+        window.google.accounts.id.initialize({
+          client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID || '642921295-hbu979qt4a2ndq1ucpf4j8v83kmfs8mk.apps.googleusercontent.com',
+          callback: handleGoogleCallback,
+          auto_select: false,
+          cancel_on_tap_outside: true,
+          ux_mode: 'popup', // 모바일/PC 모두 팝업 모드
+          context: 'signin'
+        });
+        console.log('✅ Google Identity Services 초기화 완료');
+      } catch (error) {
+        console.error('❌ Google 초기화 실패:', error);
       }
+    } else {
+      console.warn('⚠️ Google Identity Services가 로드되지 않았습니다');
     }
   }, [handleGoogleCallback]);
 
   const handleGoogleLogin = () => {
+    console.log('🔵 Google 로그인 버튼 클릭됨');
+    
     if (!process.env.REACT_APP_GOOGLE_CLIENT_ID) {
       setError('Google OAuth 클라이언트 ID가 설정되지 않았습니다.');
       return;
     }
     
-    if (window.google) {
-      // 숨겨진 Google 버튼 클릭 (모바일/PC 모두 작동)
-      const hiddenButton = document.querySelector('#hiddenGoogleButton iframe');
-      if (hiddenButton) {
-        // Google 버튼의 iframe 클릭
-        hiddenButton.click();
-      } else {
-        // 대체: prompt 시도
-        window.google.accounts.id.prompt((notification) => {
-          if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-            setError('Google 로그인 팝업이 차단되었습니다. 팝업 차단을 해제해주세요.');
-          }
-        });
-      }
-    } else {
-      setError('Google 서비스가 로드되지 않았습니다.');
+    if (!window.google) {
+      setError('Google 서비스가 로드되지 않았습니다. 페이지를 새로고침해주세요.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      console.log('🔵 Google prompt() 호출 시작');
+      
+      // 모바일/PC 모두 작동하는 방식
+      window.google.accounts.id.prompt((notification) => {
+        console.log('🔵 Notification:', notification);
+        
+        if (notification.isNotDisplayed()) {
+          console.warn('⚠️ 팝업이 표시되지 않음');
+          // 팝업이 안 뜨면 OAuth 2.0 플로우로 리다이렉트
+          const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID || '642921295-hbu979qt4a2ndq1ucpf4j8v83kmfs8mk.apps.googleusercontent.com';
+          const redirectUri = window.location.origin;
+          const oauthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=id_token&scope=openid%20email%20profile&nonce=${Date.now()}`;
+          console.log('🔵 OAuth URL로 리다이렉트:', oauthUrl);
+          window.location.href = oauthUrl;
+        } else if (notification.isSkippedMoment()) {
+          console.warn('⚠️ 사용자가 건너뜀');
+          setLoading(false);
+        }
+      });
+    } catch (error) {
+      console.error('❌ Google 로그인 오류:', error);
+      setError('Google 로그인 중 오류가 발생했습니다: ' + error.message);
+      setLoading(false);
     }
   };
 
@@ -293,19 +305,6 @@ const LoginPage = () => {
           )}
 
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {/* 숨겨진 Google 버튼 (모바일 지원용) */}
-            <Box 
-              id="hiddenGoogleButton" 
-              sx={{ 
-                position: 'absolute',
-                left: '-9999px',
-                width: '1px',
-                height: '1px',
-                overflow: 'hidden'
-              }}
-            />
-            
-            {/* 커스텀 디자인 버튼 */}
             <Button
               variant="contained"
               size="large"
