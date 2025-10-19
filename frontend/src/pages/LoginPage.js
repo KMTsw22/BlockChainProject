@@ -90,7 +90,7 @@ const LoginPage = () => {
   }, []);
 
   useEffect(() => {
-    // Google Identity Services 초기화 및 버튼 렌더링
+    // Google Identity Services 초기화 (모바일 지원)
     if (window.google) {
       window.google.accounts.id.initialize({
         client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID || '642921295-hbu979qt4a2ndq1ucpf4j8v83kmfs8mk.apps.googleusercontent.com',
@@ -99,16 +99,15 @@ const LoginPage = () => {
         cancel_on_tap_outside: true
       });
       
-      // 버튼 ID가 있으면 자동 렌더링
-      const buttonDiv = document.getElementById('googleSignInButton');
-      if (buttonDiv) {
+      // 숨겨진 Google 버튼 렌더링 (모바일 지원)
+      const hiddenButtonDiv = document.getElementById('hiddenGoogleButton');
+      if (hiddenButtonDiv) {
         window.google.accounts.id.renderButton(
-          buttonDiv,
+          hiddenButtonDiv,
           {
             theme: 'filled_blue',
             size: 'large',
-            width: 350,
-            text: 'signin_with'
+            width: 250
           }
         );
       }
@@ -122,13 +121,19 @@ const LoginPage = () => {
     }
     
     if (window.google) {
-      // 모바일과 데스크톱 모두 지원하는 방식
-      window.google.accounts.id.prompt((notification) => {
-        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-          // 팝업이 안 뜨면 수동으로 버튼 클릭 유도
-          console.log('Google One Tap이 표시되지 않았습니다. 버튼을 사용해주세요.');
-        }
-      });
+      // 숨겨진 Google 버튼 클릭 (모바일/PC 모두 작동)
+      const hiddenButton = document.querySelector('#hiddenGoogleButton iframe');
+      if (hiddenButton) {
+        // Google 버튼의 iframe 클릭
+        hiddenButton.click();
+      } else {
+        // 대체: prompt 시도
+        window.google.accounts.id.prompt((notification) => {
+          if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+            setError('Google 로그인 팝업이 차단되었습니다. 팝업 차단을 해제해주세요.');
+          }
+        });
+      }
     } else {
       setError('Google 서비스가 로드되지 않았습니다.');
     }
@@ -288,17 +293,19 @@ const LoginPage = () => {
           )}
 
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {/* Google 공식 버튼 (모바일 지원) */}
+            {/* 숨겨진 Google 버튼 (모바일 지원용) */}
             <Box 
-              id="googleSignInButton" 
+              id="hiddenGoogleButton" 
               sx={{ 
-                display: 'flex', 
-                justifyContent: 'center',
-                minHeight: '50px'
+                position: 'absolute',
+                left: '-9999px',
+                width: '1px',
+                height: '1px',
+                overflow: 'hidden'
               }}
             />
             
-            {/* 대체 버튼 (Google 버튼이 안 뜨면 사용) */}
+            {/* 커스텀 디자인 버튼 */}
             <Button
               variant="contained"
               size="large"
@@ -313,7 +320,7 @@ const LoginPage = () => {
                 py: 1.5
               }}
             >
-              {loading ? <CircularProgress size={24} color="inherit" /> : 'Google로 로그인 (대체)'}
+              {loading ? <CircularProgress size={24} color="inherit" /> : 'Google로 로그인'}
             </Button>
 
             <Button
