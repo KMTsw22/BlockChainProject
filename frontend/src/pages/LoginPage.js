@@ -89,6 +89,24 @@ const LoginPage = () => {
     }
   }, []);
 
+  // OAuth 리다이렉트 후 돌아왔을 때 처리
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash && hash.includes('id_token=')) {
+      console.log('🔵 OAuth 리다이렉트 감지:', hash);
+      const params = new URLSearchParams(hash.substring(1));
+      const idToken = params.get('id_token');
+      
+      if (idToken) {
+        console.log('🔵 ID 토큰 발견, 처리 중...');
+        // URL 정리
+        window.history.replaceState(null, '', window.location.pathname);
+        // 콜백으로 처리
+        handleGoogleCallback({ credential: idToken });
+      }
+    }
+  }, [handleGoogleCallback]);
+  
   useEffect(() => {
     // Google Identity Services 초기화 (모바일 지원)
     if (window.google) {
