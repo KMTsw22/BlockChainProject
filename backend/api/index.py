@@ -15,7 +15,12 @@ from google.oauth2 import id_token
 from .database import get_mongodb_database, test_connection
 
 # FastAPI 앱 생성
-app = FastAPI(title="소셜 지갑 API", version="1.0.0")
+# root_path를 설정하여 /api 프리픽스 처리
+app = FastAPI(
+    title="소셜 지갑 API", 
+    version="1.0.0",
+    root_path="/api" if os.getenv("VERCEL") else ""
+)
 
 # CORS 설정 (모든 오리진 허용 - 서버리스 환경)
 app.add_middleware(
