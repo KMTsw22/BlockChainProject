@@ -90,12 +90,28 @@ const LoginPage = () => {
   }, []);
 
   useEffect(() => {
-    // Google Identity Services 초기화
+    // Google Identity Services 초기화 및 버튼 렌더링
     if (window.google) {
       window.google.accounts.id.initialize({
         client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID || '642921295-hbu979qt4a2ndq1ucpf4j8v83kmfs8mk.apps.googleusercontent.com',
-        callback: handleGoogleCallback
+        callback: handleGoogleCallback,
+        auto_select: false,
+        cancel_on_tap_outside: true
       });
+      
+      // 버튼 ID가 있으면 자동 렌더링
+      const buttonDiv = document.getElementById('googleSignInButton');
+      if (buttonDiv) {
+        window.google.accounts.id.renderButton(
+          buttonDiv,
+          {
+            theme: 'filled_blue',
+            size: 'large',
+            width: 350,
+            text: 'signin_with'
+          }
+        );
+      }
     }
   }, [handleGoogleCallback]);
 
@@ -106,7 +122,13 @@ const LoginPage = () => {
     }
     
     if (window.google) {
-      window.google.accounts.id.prompt();
+      // 모바일과 데스크톱 모두 지원하는 방식
+      window.google.accounts.id.prompt((notification) => {
+        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+          // 팝업이 안 뜨면 수동으로 버튼 클릭 유도
+          console.log('Google One Tap이 표시되지 않았습니다. 버튼을 사용해주세요.');
+        }
+      });
     } else {
       setError('Google 서비스가 로드되지 않았습니다.');
     }
@@ -266,6 +288,17 @@ const LoginPage = () => {
           )}
 
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {/* Google 공식 버튼 (모바일 지원) */}
+            <Box 
+              id="googleSignInButton" 
+              sx={{ 
+                display: 'flex', 
+                justifyContent: 'center',
+                minHeight: '50px'
+              }}
+            />
+            
+            {/* 대체 버튼 (Google 버튼이 안 뜨면 사용) */}
             <Button
               variant="contained"
               size="large"
@@ -280,10 +313,8 @@ const LoginPage = () => {
                 py: 1.5
               }}
             >
-              {loading ? <CircularProgress size={24} color="inherit" /> : 'Google로 로그인'}
+              {loading ? <CircularProgress size={24} color="inherit" /> : 'Google로 로그인 (대체)'}
             </Button>
-            
-            
 
             <Button
               variant="contained"
