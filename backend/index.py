@@ -631,7 +631,7 @@ async def google_oauth_callback(request: GoogleCodeRequest):
             "code": request.code,
             "client_id": GOOGLE_CLIENT_ID,
             "client_secret": GOOGLE_CLIENT_SECRET,
-            "redirect_uri": os.getenv("FRONTEND_URL", "https://blockchainproject-frontend.onrender.com"),
+            "redirect_uri": os.getenv("FRONTEND_URL", "https://blockchainproject-frontend.onrender.com") + "/login",
             "grant_type": "authorization_code"
         }
         
