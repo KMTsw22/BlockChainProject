@@ -12,6 +12,12 @@ from web3 import Web3
 import json
 from google.auth.transport import requests
 from google.oauth2 import id_token
+import logging
+import traceback
+
+# 로깅 설정
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Render 환경에서는 절대 경로, 로컬에서는 상대 경로
 try:
@@ -603,29 +609,41 @@ class GoogleTokenRequest(BaseModel):
 async def google_auth(request: GoogleTokenRequest):
     """Google OAuth 토큰 검증 및 사용자 생성"""
     try:
+        logger.info("=== Google OAuth 시작 ===")
+        
         # Google ID 토큰 검증
         GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+        logger.info(f"GOOGLE_CLIENT_ID 확인: {'설정됨' if GOOGLE_CLIENT_ID else '없음'}")
+        
         if not GOOGLE_CLIENT_ID:
+            logger.error("GOOGLE_CLIENT_ID 환경 변수가 설정되지 않았습니다")
             raise HTTPException(status_code=500, detail="Google OAuth 설정이 필요합니다")
         
         # ID 토큰 검증
+        logger.info("Google ID 토큰 검증 시작")
         idinfo = id_token.verify_oauth2_token(
             request.token, 
             requests.Request(), 
             GOOGLE_CLIENT_ID
         )
+        logger.info(f"토큰 검증 성공: {idinfo.get('email')}")
         
         # 사용자 정보 추출
         google_id = idinfo['sub']
         email = idinfo['email']
         name = idinfo.get('name', email.split('@')[0])
+        logger.info(f"사용자 정보 추출 완료: {email}")
         
         # 기존 사용자 확인 (MongoDB)
+        logger.info("MongoDB에서 기존 사용자 확인 중")
         existing_user = db.users.find_one({"google_id": google_id})
+        logger.info(f"기존 사용자: {'발견됨' if existing_user else '없음'}")
         
         if existing_user:
             # 기존 사용자 로그인
+            logger.info("기존 사용자 로그인 처리")
             access_token = create_access_token(data={"sub": str(existing_user["_id"])})
+            logger.info("JWT 토큰 생성 완료")
             return {
                 "access_token": access_token,
                 "token_type": "bearer",
@@ -641,13 +659,17 @@ async def google_auth(request: GoogleTokenRequest):
             }
         else:
             # 새 사용자 생성
+            logger.info("새 사용자 생성 시작")
             user_id = f"user_{secrets.token_hex(8)}"
             
             # 새 지갑 생성
+            logger.info("새 지갑 생성 중")
             account = w3.eth.account.create()
             wallet_id = f"wallet_{secrets.token_hex(8)}"
+            logger.info(f"지갑 주소 생성 완료: {account.address}")
             
             # 지갑 정보를 MongoDB에 저장
+            logger.info("MongoDB에 지갑 정보 저장 중")
             wallet_data = {
                 "user_id": user_id,
                 "address": account.address,
@@ -656,8 +678,10 @@ async def google_auth(request: GoogleTokenRequest):
                 "updated_at": datetime.now()
             }
             wallet_result = db.wallets.insert_one(wallet_data)
+            logger.info(f"지갑 정보 저장 완료: {wallet_result.inserted_id}")
             
             # 새 사용자 생성
+            logger.info("MongoDB에 사용자 정보 저장 중")
             user_data = {
                 "google_id": google_id,
                 "email": email,
@@ -667,9 +691,12 @@ async def google_auth(request: GoogleTokenRequest):
                 "updated_at": datetime.now()
             }
             user_result = db.users.insert_one(user_data)
+            logger.info(f"사용자 정보 저장 완료: {user_result.inserted_id}")
             
             # JWT 토큰 생성
+            logger.info("JWT 토큰 생성 중")
             access_token = create_access_token(data={"sub": str(user_result.inserted_id)})
+            logger.info("JWT 토큰 생성 완료")
             
             return {
                 "access_token": access_token,
@@ -686,6 +713,10 @@ async def google_auth(request: GoogleTokenRequest):
             }
             
     except ValueError as e:
+        logger.error(f"ValueError - 유효하지 않은 Google 토큰: {str(e)}")
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=400, detail=f"유효하지 않은 Google 토큰: {str(e)}")
     except Exception as e:
+        logger.error(f"Exception - Google 인증 중 오류: {str(e)}")
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"Google 인증 중 오류 발생: {str(e)}")
