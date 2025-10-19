@@ -602,115 +602,113 @@ async def get_wallet_info(user_id: str = Depends(verify_token)):
         raise HTTPException(status_code=500, detail=f"지갑 정보 조회 중 오류 발생: {str(e)}")
 
 # Google OAuth 처리
-class GoogleTokenRequest(BaseModel):
-    token: str
+class GoogleCodeRequest(BaseModel):
+    code: str
 
 class PasswordLoginRequest(BaseModel):
     social_id: str
     password: str
     wallet_address: str = None  # 지갑 주소 (선택사항)
 
-@app.post("/auth/google")
-async def google_auth(request: GoogleTokenRequest):
-    """Google OAuth 토큰 검증 및 사용자 생성"""
+@app.post("/auth/google/callback")
+async def google_oauth_callback(request: GoogleCodeRequest):
+    """Google OAuth 2.0 Authorization Code를 처리"""
     try:
-        logger.info("=== Google OAuth 시작 ===")
+        logger.info("=== Google OAuth Callback 시작 ===")
+        logger.info(f"받은 code: {request.code[:20]}...")
         
-        # Google ID 토큰 검증
+        # Google Token Endpoint로 code 교환
         GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
-        logger.info(f"GOOGLE_CLIENT_ID 확인: {'설정됨' if GOOGLE_CLIENT_ID else '없음'}")
+        GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
         
-        if not GOOGLE_CLIENT_ID:
-            logger.error("GOOGLE_CLIENT_ID 환경 변수가 설정되지 않았습니다")
+        if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET:
+            logger.error("Google OAuth 설정 누락")
             raise HTTPException(status_code=500, detail="Google OAuth 설정이 필요합니다")
         
-        # ID 토큰 검증
-        logger.info("Google ID 토큰 검증 시작")
+        # 토큰 요청
+        token_url = "https://oauth2.googleapis.com/token"
+        token_data = {
+            "code": request.code,
+            "client_id": GOOGLE_CLIENT_ID,
+            "client_secret": GOOGLE_CLIENT_SECRET,
+            "redirect_uri": os.getenv("FRONTEND_URL", "https://blockchainproject-frontend.onrender.com"),
+            "grant_type": "authorization_code"
+        }
+        
+        logger.info("Google에 access_token 요청 중...")
+        token_response = httpx.post(token_url, data=token_data)
+        
+        if token_response.status_code != 200:
+            logger.error(f"토큰 요청 실패: {token_response.text}")
+            raise HTTPException(status_code=400, detail="Google 토큰 요청 실패")
+        
+        tokens = token_response.json()
+        id_token_str = tokens.get("id_token")
+        
+        logger.info("Google ID token 받음")
+        
+        # ID 토큰 검증 및 사용자 정보 추출
         idinfo = id_token.verify_oauth2_token(
-            request.token, 
-            requests.Request(), 
+            id_token_str,
+            requests.Request(),
             GOOGLE_CLIENT_ID
         )
-        logger.info(f"토큰 검증 성공: {idinfo.get('email')}")
         
-        # 사용자 정보 추출
         google_id = idinfo['sub']
         email = idinfo['email']
         name = idinfo.get('name', email.split('@')[0])
-        logger.info(f"사용자 정보 추출 완료: {email}")
+        logger.info(f"사용자 정보: {email}")
         
-        # 기존 사용자 확인 (MongoDB)
-        logger.info("MongoDB에서 기존 사용자 확인 중")
+        # 기존 사용자 확인
         existing_user = db.users.find_one({"google_id": google_id})
-        logger.info(f"기존 사용자: {'발견됨' if existing_user else '없음'}")
         
         if existing_user:
-            # 기존 사용자 로그인
-            logger.info("기존 사용자 로그인 처리")
-            access_token = create_access_token(data={"sub": str(existing_user["_id"])})
-            logger.info("JWT 토큰 생성 완료")
+            logger.info("기존 사용자 로그인")
+            jwt_token = create_access_token(data={"sub": str(existing_user["_id"])})
             return {
-                "access_token": access_token,
+                "access_token": jwt_token,
                 "token_type": "bearer",
                 "user": {
                     "id": str(existing_user["_id"]),
                     "google_id": existing_user["google_id"],
                     "email": existing_user["email"],
                     "name": existing_user["name"],
-                    "profile_image": existing_user.get("profile_image"),
-                    "wallet_address": existing_user.get("wallet_address"),
-                    "wallet_created": existing_user.get("wallet_created", False),
-                    "created_at": existing_user.get("created_at")
+                    "wallet_created": existing_user.get("wallet_created", False)
                 },
                 "is_new_user": False
             }
         else:
-            # 새 사용자 생성 (지갑은 프론트엔드에서 생성)
-            logger.info("새 사용자 생성 시작")
-            
-            # 사용자 정보만 저장 (지갑은 나중에 생성)
-            logger.info("MongoDB에 사용자 정보 저장 중")
-            user_data = {
+            logger.info("신규 사용자 생성")
+            # 새 사용자 생성
+            new_user = {
                 "google_id": google_id,
                 "email": email,
                 "name": name,
-                "profile_image": idinfo.get('picture'),
-                "wallet_created": False,  # 지갑 미생성 상태
-                "welcome_bonus_given": False,  # 환영 보너스 미지급
-                "created_at": datetime.now(),
-                "updated_at": datetime.now()
+                "wallet_created": False,
+                "created_at": datetime.utcnow()
             }
-            user_result = db.users.insert_one(user_data)
-            logger.info(f"사용자 정보 저장 완료: {user_result.inserted_id}")
             
-            # JWT 토큰 생성
-            logger.info("JWT 토큰 생성 중")
-            access_token = create_access_token(data={"sub": str(user_result.inserted_id)})
-            logger.info("JWT 토큰 생성 완료")
+            result = db.users.insert_one(new_user)
+            logger.info(f"사용자 생성 완료: {result.inserted_id}")
             
+            jwt_token = create_access_token(data={"sub": str(result.inserted_id)})
             return {
-                "access_token": access_token,
+                "access_token": jwt_token,
                 "token_type": "bearer",
                 "user": {
-                    "id": str(user_result.inserted_id),
+                    "id": str(result.inserted_id),
                     "google_id": google_id,
                     "email": email,
                     "name": name,
-                    "profile_image": idinfo.get('picture'),
-                    "wallet_created": False,
-                    "created_at": user_data["created_at"].isoformat()
+                    "wallet_created": False
                 },
                 "is_new_user": True
             }
             
-    except ValueError as e:
-        logger.error(f"ValueError - 유효하지 않은 Google 토큰: {str(e)}")
-        logger.error(traceback.format_exc())
-        raise HTTPException(status_code=400, detail=f"유효하지 않은 Google 토큰: {str(e)}")
     except Exception as e:
-        logger.error(f"Exception - Google 인증 중 오류: {str(e)}")
+        logger.error(f"OAuth callback 오류: {str(e)}")
         logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"Google 인증 중 오류 발생: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"OAuth 처리 중 오류: {str(e)}")
 
 @app.post("/auth/password")
 async def password_auth(request: PasswordLoginRequest):
