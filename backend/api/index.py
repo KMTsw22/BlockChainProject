@@ -12,14 +12,17 @@ from web3 import Web3
 import json
 from google.auth.transport import requests
 from google.oauth2 import id_token
-from .database import get_mongodb_database, test_connection
+
+# Render 환경에서는 절대 경로, 로컬에서는 상대 경로
+try:
+    from .database import get_mongodb_database, test_connection
+except ImportError:
+    from database import get_mongodb_database, test_connection
 
 # FastAPI 앱 생성
-# root_path를 설정하여 /api 프리픽스 처리
 app = FastAPI(
     title="소셜 지갑 API", 
-    version="1.0.0",
-    root_path="/api" if os.getenv("VERCEL") else ""
+    version="1.0.0"
 )
 
 # CORS 설정 (모든 오리진 허용 - 서버리스 환경)
