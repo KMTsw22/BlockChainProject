@@ -22,10 +22,5 @@
       "src": "/(.*)",
       "dest": "/frontend/$1"
     }
-  ],
-  "env": {
-    "SECRET_KEY": "@secret_key",
-    "WEB3_PROVIDER": "@web3_provider",
-    "GOOGLE_CLIENT_ID": "@google_client_id"
-  }
+  ]
 }
