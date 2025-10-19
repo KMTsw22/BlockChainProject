@@ -12,7 +12,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 
 # MongoDB Atlas 연결 문자열
 # 사용자가 제공한 정확한 연결 문자열 사용
-MONGODB_URL = os.getenv("MONGODB_URL", "mongodb+srv://mintae3827_db_user:kmt2003!ab@cluster0.sd6jokn.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0")
+MONGODB_URL = os.getenv("MONGODB_URI", os.getenv("MONGODB_URL", "mongodb+srv://mintae3827_db_user:kmt2003!ab@cluster0.sd6jokn.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0"))
 
 # 클라이언트 인스턴스
 client = None
