@@ -89,23 +89,6 @@ const LoginPage = () => {
     }
   }, []);
 
-  // OAuth 리다이렉트 후 돌아왔을 때 처리
-  useEffect(() => {
-    const hash = window.location.hash;
-    if (hash && hash.includes('id_token=')) {
-      console.log('🔵 OAuth 리다이렉트 감지:', hash);
-      const params = new URLSearchParams(hash.substring(1));
-      const idToken = params.get('id_token');
-      
-      if (idToken) {
-        console.log('🔵 ID 토큰 발견, 처리 중...');
-        // URL 정리
-        window.history.replaceState(null, '', window.location.pathname);
-        // 콜백으로 처리
-        handleGoogleCallback({ credential: idToken });
-      }
-    }
-  }, [handleGoogleCallback]);
   
   useEffect(() => {
     // Google Identity Services 초기화 (모바일 지원)
@@ -145,21 +128,15 @@ const LoginPage = () => {
       setLoading(true);
       console.log('🔵 Google prompt() 호출 시작');
       
-      // 모바일/PC 모두 작동하는 방식
+      // Google One Tap 시도
       window.google.accounts.id.prompt((notification) => {
         console.log('🔵 Notification:', notification);
         
-        if (notification.isNotDisplayed()) {
-          console.warn('⚠️ 팝업이 표시되지 않음');
-          // 팝업이 안 뜨면 OAuth 2.0 플로우로 리다이렉트
-          const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID || '642921295-hbu979qt4a2ndq1ucpf4j8v83kmfs8mk.apps.googleusercontent.com';
-          const redirectUri = window.location.origin;
-          const oauthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=id_token&scope=openid%20email%20profile&nonce=${Date.now()}`;
-          console.log('🔵 OAuth URL로 리다이렉트:', oauthUrl);
-          window.location.href = oauthUrl;
-        } else if (notification.isSkippedMoment()) {
-          console.warn('⚠️ 사용자가 건너뜀');
+        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+          console.warn('⚠️ Google One Tap 사용 불가');
           setLoading(false);
+          // 팝업 차단 또는 FedCM 비활성화
+          setError('❌ Google 로그인이 차단되었습니다.\n\n해결 방법:\n1. 브라우저 주소창 왼쪽 자물쇠 아이콘 클릭\n2. "타사 로그인" 또는 "쿠키" 허용\n3. 페이지 새로고침 후 재시도\n\n또는 PC에서 시도해주세요.');
         }
       });
     } catch (error) {
