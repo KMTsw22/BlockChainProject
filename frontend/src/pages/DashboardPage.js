@@ -56,31 +56,59 @@ const DashboardPage = () => {
       py: 4
     }}>
       <Container maxWidth="lg">
-        <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-          <Box>
-            <Typography variant="h4" component="h1" gutterBottom sx={{ color: 'white', fontWeight: 'bold' }}>
+        <Box sx={{ 
+          mb: 4, 
+          display: 'flex', 
+          flexDirection: { xs: 'column', md: 'row' },
+          justifyContent: 'space-between', 
+          alignItems: { xs: 'center', md: 'flex-start' },
+          gap: 2
+        }}>
+          <Box sx={{ textAlign: { xs: 'center', md: 'left' } }}>
+            <Typography 
+              variant="h4" 
+              component="h1" 
+              gutterBottom 
+              sx={{ 
+                color: 'white', 
+                fontWeight: 'bold',
+                fontSize: { xs: '1.5rem', sm: '2rem', md: '2.5rem' },
+                wordBreak: 'break-word'
+              }}
+            >
               🎉 환영합니다, {user?.name}님!
             </Typography>
-            <Typography variant="body1" sx={{ color: 'rgba(255,255,255,0.8)' }}>
+            <Typography 
+              variant="body1" 
+              sx={{ 
+                color: 'rgba(255,255,255,0.8)',
+                fontSize: { xs: '0.9rem', md: '1rem' }
+              }}
+            >
               블록체인 지갑에 오신 것을 환영합니다
             </Typography>
           </Box>
-          계정 토큰
-          지갑
-          <Button
-            variant="contained"
-            color="error"
-            startIcon={<LogoutIcon />}
-            onClick={handleLogout}
-            sx={{ 
-              ml: 2,
-              borderRadius: 2,
-              textTransform: 'none',
-              fontWeight: 'bold'
-            }}
-          >
-            로그아웃
-          </Button>
+          
+          <Box sx={{ 
+            display: 'flex', 
+            alignItems: 'center',
+            gap: 2
+          }}>
+            <Button
+              variant="contained"
+              color="error"
+              startIcon={<LogoutIcon />}
+              onClick={handleLogout}
+              sx={{ 
+                borderRadius: 2,
+                textTransform: 'none',
+                fontWeight: 'bold',
+                minWidth: { xs: '120px', sm: 'auto' }
+              }}
+            >
+              로그아웃
+            </Button>
+          </Box>
         </Box>
 
       <Grid container spacing={3}>
@@ -172,12 +200,13 @@ const DashboardPage = () => {
                   sx={{ 
                     fontFamily: 'monospace', 
                     backgroundColor: '#2a2a2a', 
-                    padding: 2, 
+                    padding: { xs: 1, md: 2 }, 
                     borderRadius: 2,
                     wordBreak: 'break-all',
                     color: '#ffffff',
                     border: '1px solid #444',
-                    fontSize: '0.9rem'
+                    fontSize: { xs: '0.8rem', sm: '0.9rem' },
+                    lineHeight: 1.4
                   }}
                 >
                   {walletInfo?.address || '로딩 중...'}
