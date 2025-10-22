@@ -61,10 +61,15 @@ const DashboardPage = () => {
           display: 'flex', 
           flexDirection: { xs: 'column', md: 'row' },
           justifyContent: 'space-between', 
-          alignItems: { xs: 'center', md: 'flex-start' },
-          gap: 2
+          alignItems: { xs: 'center', md: 'center' },
+          gap: 3,
+          p: 3,
+          borderRadius: 3,
+          background: 'linear-gradient(135deg, rgba(45,45,45,0.8) 0%, rgba(30,30,30,0.9) 100%)',
+          border: '1px solid rgba(255,255,255,0.1)',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.3)'
         }}>
-          <Box sx={{ textAlign: { xs: 'center', md: 'left' } }}>
+          <Box sx={{ textAlign: { xs: 'center', md: 'left' }, flex: 1 }}>
             <Typography 
               variant="h4" 
               component="h1" 
@@ -73,41 +78,45 @@ const DashboardPage = () => {
                 color: 'white', 
                 fontWeight: 'bold',
                 fontSize: { xs: '1.5rem', sm: '2rem', md: '2.5rem' },
-                wordBreak: 'break-word'
+                wordBreak: 'break-word',
+                mb: 0
               }}
             >
               🎉 환영합니다, {user?.name}님!
-            </Typography>
-            <Typography 
-              variant="body1" 
-              sx={{ 
-                color: 'rgba(255,255,255,0.8)',
-                fontSize: { xs: '0.9rem', md: '1rem' }
-              }}
-            >
-              블록체인 지갑에 오신 것을 환영합니다
             </Typography>
           </Box>
           
           <Box sx={{ 
             display: 'flex', 
             alignItems: 'center',
-            gap: 2
+            gap: 2,
+            flexShrink: 0
           }}>
             <Button
-              variant="contained"
-              color="error"
+              variant="outlined"
               startIcon={<LogoutIcon />}
               onClick={handleLogout}
               sx={{ 
-                borderRadius: 2,
+                borderRadius: 3,
                 textTransform: 'none',
                 fontWeight: 'bold',
-                minWidth: { xs: '140px', sm: '160px' },
-                height: { xs: '44px', sm: '48px' },
+                minWidth: { xs: '120px', sm: '140px' },
+                height: { xs: '40px', sm: '44px' },
                 fontSize: { xs: '0.9rem', sm: '1rem' },
                 px: 3,
-                py: 1.5
+                py: 1.5,
+                color: 'rgba(255,255,255,0.8)',
+                borderColor: 'rgba(255,255,255,0.3)',
+                backgroundColor: 'rgba(255,255,255,0.05)',
+                backdropFilter: 'blur(10px)',
+                '&:hover': {
+                  backgroundColor: 'rgba(255,255,255,0.1)',
+                  borderColor: 'rgba(255,255,255,0.5)',
+                  color: 'white',
+                  transform: 'translateY(-2px)',
+                  boxShadow: '0 4px 20px rgba(255,255,255,0.1)'
+                },
+                transition: 'all 0.3s ease'
               }}
             >
               로그아웃
