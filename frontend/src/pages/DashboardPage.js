@@ -103,7 +103,11 @@ const DashboardPage = () => {
                 borderRadius: 2,
                 textTransform: 'none',
                 fontWeight: 'bold',
-                minWidth: { xs: '120px', sm: 'auto' }
+                minWidth: { xs: '140px', sm: '160px' },
+                height: { xs: '44px', sm: '48px' },
+                fontSize: { xs: '0.9rem', sm: '1rem' },
+                px: 3,
+                py: 1.5
               }}
             >
               로그아웃
