@@ -446,6 +446,9 @@ async def claim_rewards(user_id: str = Depends(verify_token)):
 class WelcomeBonusRequest(BaseModel):
     address: str
 
+class UserSettingsRequest(BaseModel):
+    show_wallet_public: bool
+
 @app.post("/wallet/welcome-bonus")
 async def give_welcome_bonus(request: WelcomeBonusRequest, user_id: str = Depends(verify_token)):
     """클라이언트에서 요청한 환영 보너스 지급"""
@@ -787,9 +790,10 @@ async def password_auth(request: PasswordLoginRequest):
                 "updated_at": datetime.now()
             }
             
-            # 지갑 주소는 클라이언트에서만 관리 (서버에 저장하지 않음)
+            # 지갑 주소를 DB에 저장
             if request.wallet_address:
-                logger.info(f"클라이언트 지갑 주소 확인: {request.wallet_address}")
+                logger.info(f"클라이언트 지갑 주소 DB에 저장: {request.wallet_address}")
+                update_data["wallet_address"] = request.wallet_address
             
             result = db.users.update_one(
                 {"_id": user["_id"]}, 
@@ -799,7 +803,7 @@ async def password_auth(request: PasswordLoginRequest):
             
             # 저장 확인
             updated_user = db.users.find_one({"_id": user["_id"]})
-            logger.info(f"저장 확인 - wallet_created: {updated_user.get('wallet_created')}")
+            logger.info(f"저장 확인 - wallet_created: {updated_user.get('wallet_created')}, wallet_address: {updated_user.get('wallet_address')}")
             logger.info("새 지갑 생성 완료")
             
             return {
@@ -821,3 +825,74 @@ async def password_auth(request: PasswordLoginRequest):
         logger.error(f"Password Auth 오류: {str(e)}")
         logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"로그인 처리 중 오류 발생: {str(e)}")
+
+@app.get("/user/settings")
+async def get_user_settings(user_id: str = Depends(verify_token)):
+    """사용자 설정 조회"""
+    try:
+        from bson import ObjectId
+        user = db.users.find_one({"_id": ObjectId(user_id)})
+        if not user:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
+        
+        return {
+            "show_wallet_public": user.get("show_wallet_public", False),
+            "wallet_address": user.get("wallet_address"),
+            "name": user.get("name"),
+            "email": user.get("email")
+        }
+    except Exception as e:
+        logger.error(f"설정 조회 오류: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"설정 조회 중 오류 발생: {str(e)}")
+
+@app.put("/user/settings")
+async def update_user_settings(request: UserSettingsRequest, user_id: str = Depends(verify_token)):
+    """사용자 설정 업데이트"""
+    try:
+        from bson import ObjectId
+        user = db.users.find_one({"_id": ObjectId(user_id)})
+        if not user:
+            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
+        
+        # 설정 업데이트
+        result = db.users.update_one(
+            {"_id": ObjectId(user_id)},
+            {"$set": {
+                "show_wallet_public": request.show_wallet_public,
+                "updated_at": datetime.now()
+            }}
+        )
+        
+        logger.info(f"사용자 설정 업데이트: user_id={user_id}, show_wallet_public={request.show_wallet_public}")
+        
+        return {
+            "success": True,
+            "show_wallet_public": request.show_wallet_public,
+            "message": "설정이 업데이트되었습니다"
+        }
+    except Exception as e:
+        logger.error(f"설정 업데이트 오류: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"설정 업데이트 중 오류 발생: {str(e)}")
+
+@app.get("/public/wallets")
+async def get_public_wallets():
+    """공개 지갑 주소 목록 조회"""
+    try:
+        # show_wallet_public이 True인 사용자만 조회
+        public_users = db.users.find(
+            {"show_wallet_public": True, "wallet_address": {"$exists": True, "$ne": None}},
+            {"name": 1, "wallet_address": 1, "email": 1, "_id": 0}
+        ).limit(100)  # 최대 100명
+        
+        result = []
+        for user in public_users:
+            result.append({
+                "name": user.get("name"),
+                "wallet_address": user.get("wallet_address"),
+                "email": user.get("email")
+            })
+        
+        return {"wallets": result, "count": len(result)}
+    except Exception as e:
+        logger.error(f"공개 지갑 목록 조회 오류: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"공개 지갑 목록 조회 중 오류 발생: {str(e)}")

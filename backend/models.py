@@ -33,6 +33,7 @@ class User(BaseModel):
     wallet_created: bool = False
     wallet_password: Optional[str] = None
     welcome_bonus_given: bool = False
+    show_wallet_public: bool = False  # 지갑 주소 공개 여부
     created_at: datetime = Field(default_factory=datetime.now)
     updated_at: datetime = Field(default_factory=datetime.now)
 

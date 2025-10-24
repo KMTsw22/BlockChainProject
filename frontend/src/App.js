@@ -7,6 +7,8 @@ import { WalletProvider } from './contexts/WalletContext';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import WalletPage from './pages/WalletPage';
+import SettingsPage from './pages/SettingsPage';
+import PublicWalletsPage from './pages/PublicWalletsPage';
 import './App.css';
 
 const theme = createTheme({
@@ -92,6 +94,16 @@ const AppContent = () => {
             element={
               isAuthenticated ? <WalletPage /> : <Navigate to="/login" />
             } 
+          />
+          <Route 
+            path="/settings" 
+            element={
+              isAuthenticated ? <SettingsPage /> : <Navigate to="/login" />
+            } 
+          />
+          <Route 
+            path="/public-wallets" 
+            element={<PublicWalletsPage />}
           />
           <Route 
             path="/" 

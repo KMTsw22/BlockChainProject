@@ -17,7 +17,9 @@ import {
   Security as SecurityIcon,
   MonetizationOn as TokenIcon,
   Logout as LogoutIcon,
-  Refresh as RefreshIcon
+  Refresh as RefreshIcon,
+  Settings as SettingsIcon,
+  Public as PublicIcon
 } from '@mui/icons-material';
 import { useAuth } from '../contexts/AuthContext';
 import { useWallet } from '../contexts/WalletContext';
@@ -117,6 +119,57 @@ const DashboardPage = () => {
                   boxShadow: '0 4px 20px rgba(255,255,255,0.1)'
                 },
                 transition: 'all 0.3s ease'
+              }}
+            >
+              로그아웃
+            </Button>
+          </Box>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <Button
+              variant="outlined"
+              startIcon={<PublicIcon />}
+              onClick={() => navigate('/public-wallets')}
+              sx={{ 
+                borderRadius: 2,
+                textTransform: 'none',
+                fontWeight: 'bold',
+                color: 'white',
+                borderColor: 'rgba(255,255,255,0.3)',
+                '&:hover': {
+                  borderColor: 'rgba(255,255,255,0.5)',
+                  backgroundColor: 'rgba(255,255,255,0.1)'
+                }
+              }}
+            >
+              공개 게시판
+            </Button>
+            <Button
+              variant="outlined"
+              startIcon={<SettingsIcon />}
+              onClick={() => navigate('/settings')}
+              sx={{ 
+                borderRadius: 2,
+                textTransform: 'none',
+                fontWeight: 'bold',
+                color: 'white',
+                borderColor: 'rgba(255,255,255,0.3)',
+                '&:hover': {
+                  borderColor: 'rgba(255,255,255,0.5)',
+                  backgroundColor: 'rgba(255,255,255,0.1)'
+                }
+              }}
+            >
+              설정
+            </Button>
+            <Button
+              variant="contained"
+              color="error"
+              startIcon={<LogoutIcon />}
+              onClick={handleLogout}
+              sx={{ 
+                borderRadius: 2,
+                textTransform: 'none',
+                fontWeight: 'bold'
               }}
             >
               로그아웃
