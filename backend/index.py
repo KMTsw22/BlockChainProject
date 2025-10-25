@@ -866,7 +866,7 @@ async def update_user_settings(request: UserSettingsRequest, user_id: str = Depe
     """사용자 설정 업데이트"""
     try:
         from bson import ObjectId
-        user = db.users.find_one({"_id": ObjectId(user_id)})
+        user = db.users.find_one({"_id": ObjectId(user_id)})    
         if not user:
             raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
         

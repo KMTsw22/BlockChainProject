@@ -16,11 +16,16 @@ import {
 import { Google as GoogleIcon, Lock as LockIcon } from '@mui/icons-material';
 import Web3 from 'web3';
 
-// 결정론적 지갑 생성 함수
+// 결정론적 지갑 생성 함수 (WalletContext와 동일한 방식)
 const generateDeterministicWallet = (socialId, password) => {
   const web3 = new Web3();
-  const seed = `${socialId}_${password}`;
-  const account = web3.eth.accounts.create(seed);
+  const seedString = `${socialId}_${password}`;
+  
+  // keccak256으로 해싱하여 결정론적 private key 생성
+  const seedHash = web3.utils.keccak256(seedString);
+  const privateKey = '0x' + seedHash.slice(2, 66); // 32바이트 (64자리) private key
+  const account = web3.eth.accounts.privateKeyToAccount(privateKey);
+  
   return account.address;
 };
 

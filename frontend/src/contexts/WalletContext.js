@@ -142,7 +142,7 @@ export const WalletProvider = ({ children }) => {
         
         // 시드 문자열 생성 (클라이언트에서)
         const seedString = `${userId}_${password}`;
-        const seedHash = web3.utils.sha3(seedString) || web3.utils.keccak256(seedString);
+        const seedHash = web3.utils.keccak256(seedString);
         
         // 결정론적 지갑 생성 (시드에서 직접 private key 생성)
         const privateKey = '0x' + seedHash.slice(2, 66); // 32바이트 private key
@@ -450,7 +450,7 @@ export const WalletProvider = ({ children }) => {
     try {
       setLoading(true);
       
-      console.log(`🔄 메타 트랜잭션 시작: ${amount}개 → ${toAddress}`);
+      console.log(`🔄 메타 트랜잭션 시작: ${amount}개 ${walletInfo.address} → ${toAddress}`);
       
       // 1. Intent(의도) 생성
       const nonce = Date.now(); // 간단한 nonce (실제로는 DB에서 관리 추천)
