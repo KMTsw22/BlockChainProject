@@ -14,7 +14,11 @@ import {
   TextField,
   InputAdornment,
   IconButton,
-  Tooltip
+  Tooltip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
 import {
   Public as PublicIcon,
@@ -22,18 +26,27 @@ import {
   Search as SearchIcon,
   ContentCopy as CopyIcon,
   Refresh as RefreshIcon,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  Send as SendIcon
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
+import { useWallet } from '../contexts/WalletContext';
 
 const PublicWalletsPage = () => {
   const navigate = useNavigate();
+  const { transferTokens, loading: walletLoading } = useWallet();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [wallets, setWallets] = useState([]);
   const [filteredWallets, setFilteredWallets] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedAddress, setCopiedAddress] = useState('');
+  
+  // 송금 다이얼로그 관련 상태
+  const [sendDialogOpen, setSendDialogOpen] = useState(false);
+  const [selectedWallet, setSelectedWallet] = useState(null);
+  const [sendAmount, setSendAmount] = useState('');
 
   // 공개 지갑 목록 불러오기
   const fetchPublicWallets = async () => {
@@ -90,6 +103,50 @@ const PublicWalletsPage = () => {
     return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
   };
 
+  // 송금 다이얼로그 열기
+  const handleOpenSendDialog = (wallet) => {
+    setSelectedWallet(wallet);
+    setSendDialogOpen(true);
+    setSendAmount('');
+    setError('');
+    setSuccess('');
+  };
+
+  // 송금 다이얼로그 닫기
+  const handleCloseSendDialog = () => {
+    setSendDialogOpen(false);
+    setSelectedWallet(null);
+    setSendAmount('');
+    setError('');
+  };
+
+  // 송금 처리
+  const handleSendTokens = async () => {
+    if (!selectedWallet || !sendAmount || sendAmount <= 0) {
+      setError('올바른 금액을 입력해주세요.');
+      return;
+    }
+
+    try {
+      const result = await transferTokens(selectedWallet.wallet_address, parseInt(sendAmount));
+      
+      if (result.success) {
+        setSuccess(`${selectedWallet.name}님에게 ${sendAmount} ART 토큰을 성공적으로 전송했습니다!`);
+        handleCloseSendDialog();
+        
+        // 성공 메시지를 3초 후 자동 제거
+        setTimeout(() => {
+          setSuccess('');
+        }, 3000);
+      } else {
+        setError(result.error || '토큰 전송에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('송금 오류:', error);
+      setError('토큰 전송 중 오류가 발생했습니다.');
+    }
+  };
+
   if (loading) {
     return (
       <Container maxWidth="lg" sx={{ mt: 4, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '50vh' }}>
@@ -131,8 +188,14 @@ const PublicWalletsPage = () => {
         </Box>
 
         {error && (
-          <Alert severity="error" sx={{ mb: 3 }}>
+          <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError('')}>
             {error}
+          </Alert>
+        )}
+
+        {success && (
+          <Alert severity="success" sx={{ mb: 3 }} onClose={() => setSuccess('')}>
+            {success}
           </Alert>
         )}
 
@@ -255,6 +318,19 @@ const PublicWalletsPage = () => {
                         {wallet.wallet_address}
                       </Typography>
                     </Box>
+
+                    {/* 송금 버튼 */}
+                    <Box sx={{ mt: 2 }}>
+                      <Button
+                        variant="contained"
+                        color="primary"
+                        startIcon={<SendIcon />}
+                        onClick={() => handleOpenSendDialog(wallet)}
+                        fullWidth
+                      >
+                        송금하기
+                      </Button>
+                    </Box>
                   </CardContent>
                 </Card>
               </Grid>
@@ -273,6 +349,80 @@ const PublicWalletsPage = () => {
           </Button>
         </Box>
       </Paper>
+
+      {/* 송금 다이얼로그 */}
+      <Dialog 
+        open={sendDialogOpen} 
+        onClose={handleCloseSendDialog}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <SendIcon sx={{ mr: 1, color: 'primary.main' }} />
+            <Typography variant="h6">토큰 송금</Typography>
+          </Box>
+        </DialogTitle>
+        <DialogContent>
+          {selectedWallet && (
+            <Box sx={{ mt: 2 }}>
+              {/* 받는 사람 정보 */}
+              <Box sx={{ mb: 3, p: 2, backgroundColor: 'background.default', borderRadius: 1 }}>
+                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                  받는 사람
+                </Typography>
+                <Typography variant="h6" sx={{ mb: 1 }}>
+                  {selectedWallet.name}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                  {selectedWallet.email}
+                </Typography>
+                <Typography 
+                  variant="caption" 
+                  sx={{ 
+                    fontFamily: 'monospace',
+                    wordBreak: 'break-all',
+                    display: 'block',
+                    backgroundColor: 'white',
+                    p: 1,
+                    borderRadius: 0.5
+                  }}
+                >
+                  {selectedWallet.wallet_address}
+                </Typography>
+              </Box>
+
+              {/* 송금 금액 입력 */}
+              <TextField
+                fullWidth
+                label="송금할 금액"
+                type="number"
+                value={sendAmount}
+                onChange={(e) => setSendAmount(e.target.value)}
+                placeholder="송금할 ART 토큰 수량을 입력하세요"
+                InputProps={{
+                  endAdornment: <InputAdornment position="end">ART</InputAdornment>
+                }}
+                helperText="송금할 토큰 수량을 입력해주세요"
+                autoFocus
+              />
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 2, pt: 0 }}>
+          <Button onClick={handleCloseSendDialog} disabled={walletLoading}>
+            취소
+          </Button>
+          <Button 
+            onClick={handleSendTokens}
+            variant="contained"
+            disabled={walletLoading || !sendAmount || sendAmount <= 0}
+            startIcon={walletLoading ? <CircularProgress size={20} /> : <SendIcon />}
+          >
+            {walletLoading ? '전송 중...' : '송금하기'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };

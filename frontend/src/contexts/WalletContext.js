@@ -378,24 +378,54 @@ export const WalletProvider = ({ children }) => {
   }, [token, walletInfo, artContract, CONTRACT_ADDRESS]);
 
   const mintTokens = async (amount) => {
+    if (!token) {
+      return { 
+        success: false, 
+        error: '인증 토큰이 없습니다. 다시 로그인해주세요.' 
+      };
+    }
+
     try {
       setLoading(true);
       
-      // Web3를 사용하여 실제 스마트 컨트랙트 호출
-      console.log(`🔗 Sepolia 테스트넷 연결 중...`);
-      console.log(`📊 스마트 컨트랙트: ${CONTRACT_ADDRESS}`);
-      console.log(`🪙 토큰 발행: ${amount}개`);
+      console.log(`🔄 토큰 발행 시작: ${amount}개`);
       
-      // 실제 트랜잭션 해시 생성 (더미)
-      const transactionHash = '0x' + Math.random().toString(16).substr(2, 64);
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiUrl}/wallet/mint`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          amount: parseInt(amount)
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || '토큰 발행에 실패했습니다.');
+      }
+
+      const data = await response.json();
+      console.log('✅ 토큰 발행 성공:', data);
       
-      await fetchBalance(); // 잔액 새로고침
-      return { success: true, data: { amount, transaction_hash: transactionHash } };
+      // 잔액 새로고침
+      await fetchBalance();
+      
+      return { 
+        success: true, 
+        data: {
+          message: data.message,
+          transaction_hash: data.transaction_hash,
+          amount: amount
+        }
+      };
     } catch (error) {
-      console.error('토큰 발행 오류:', error);
+      console.error('❌ 토큰 발행 오류:', error);
       return { 
         success: false, 
-        error: '토큰 발행에 실패했습니다.' 
+        error: error.message || '토큰 발행에 실패했습니다.' 
       };
     } finally {
       setLoading(false);
@@ -403,19 +433,97 @@ export const WalletProvider = ({ children }) => {
   };
 
   const transferTokens = async (toAddress, amount) => {
+    if (!token) {
+      return { 
+        success: false, 
+        error: '인증 토큰이 없습니다. 다시 로그인해주세요.' 
+      };
+    }
+
+    if (!walletInfo?.address || !walletInfo?.private_key) {
+      return {
+        success: false,
+        error: '지갑 정보가 없습니다. 다시 로그인해주세요.'
+      };
+    }
+
     try {
       setLoading(true);
       
-      // Web3를 사용하여 직접 스마트 컨트랙트 호출
-      console.log(`토큰 전송: ${amount}개 → ${toAddress}`);
+      console.log(`🔄 메타 트랜잭션 시작: ${amount}개 → ${toAddress}`);
       
-      await fetchBalance(); // 잔액 새로고침
-      return { success: true, data: { to_address: toAddress, amount, transaction_hash: '0x...' } };
+      // 1. Intent(의도) 생성
+      const nonce = Date.now(); // 간단한 nonce (실제로는 DB에서 관리 추천)
+      const deadline = Math.floor(Date.now() / 1000) + 3600; // 1시간 유효
+      
+      const intent = {
+        from: walletInfo.address,
+        to: toAddress,
+        amount: parseInt(amount),
+        nonce: nonce,
+        deadline: deadline
+      };
+      
+      console.log('📝 Intent 생성:', intent);
+      
+      // 2. 메시지 해시 생성 (Solidity의 keccak256과 동일한 방식)
+      const messageHash = web3.utils.soliditySha3(
+        { type: 'address', value: intent.from },
+        { type: 'address', value: intent.to },
+        { type: 'uint256', value: intent.amount },
+        { type: 'uint256', value: intent.nonce },
+        { type: 'uint256', value: intent.deadline }
+      );
+      
+      console.log('🔐 메시지 해시:', messageHash);
+      
+      // 3. Private Key로 서명 (오프체인 = 가스비 무료!)
+      const signature = await web3.eth.accounts.sign(
+        messageHash,
+        walletInfo.private_key
+      );
+      
+      console.log('✍️ 서명 완료:', signature.signature);
+      
+      // 4. 서버에 Intent + Signature 전송 (메타 트랜잭션 릴레이)
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiUrl}/wallet/relay-transfer`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          intent: intent,
+          signature: signature.signature
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || '토큰 전송에 실패했습니다.');
+      }
+
+      const data = await response.json();
+      console.log('✅ 메타 트랜잭션 성공:', data);
+      
+      // 잔액 새로고침
+      await fetchBalance();
+      
+      return { 
+        success: true, 
+        data: {
+          message: data.message,
+          transaction_hash: data.transaction_hash,
+          to_address: toAddress,
+          amount: amount
+        }
+      };
     } catch (error) {
-      console.error('토큰 전송 오류:', error);
+      console.error('❌ 메타 트랜잭션 오류:', error);
       return { 
         success: false, 
-        error: '토큰 전송에 실패했습니다.' 
+        error: error.message || '토큰 전송에 실패했습니다.' 
       };
     } finally {
       setLoading(false);
@@ -423,19 +531,54 @@ export const WalletProvider = ({ children }) => {
   };
 
   const stakeTokens = async (amount) => {
+    if (!token) {
+      return { 
+        success: false, 
+        error: '인증 토큰이 없습니다. 다시 로그인해주세요.' 
+      };
+    }
+
     try {
       setLoading(true);
       
-      // Web3를 사용하여 직접 스마트 컨트랙트 호출
-      console.log(`스테이킹: ${amount}개`);
+      console.log(`🔄 토큰 스테이킹 시작: ${amount}개`);
       
-      await fetchBalance(); // 잔액 새로고침
-      return { success: true, data: { amount, transaction_hash: '0x...' } };
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiUrl}/wallet/stake`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          amount: parseInt(amount)
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || '스테이킹에 실패했습니다.');
+      }
+
+      const data = await response.json();
+      console.log('✅ 스테이킹 성공:', data);
+      
+      // 잔액 새로고침
+      await fetchBalance();
+      
+      return { 
+        success: true, 
+        data: {
+          message: data.message,
+          transaction_hash: data.transaction_hash,
+          amount: amount
+        }
+      };
     } catch (error) {
-      console.error('스테이킹 오류:', error);
+      console.error('❌ 스테이킹 오류:', error);
       return { 
         success: false, 
-        error: '스테이킹에 실패했습니다.' 
+        error: error.message || '스테이킹에 실패했습니다.' 
       };
     } finally {
       setLoading(false);
@@ -443,19 +586,50 @@ export const WalletProvider = ({ children }) => {
   };
 
   const claimRewards = async () => {
+    if (!token) {
+      return { 
+        success: false, 
+        error: '인증 토큰이 없습니다. 다시 로그인해주세요.' 
+      };
+    }
+
     try {
       setLoading(true);
       
-      // Web3를 사용하여 직접 스마트 컨트랙트 호출
-      console.log('보상 청구');
+      console.log('🔄 보상 청구 시작');
       
-      await fetchBalance(); // 잔액 새로고침
-      return { success: true, data: { transaction_hash: '0x...' } };
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      const response = await fetch(`${apiUrl}/wallet/claim-rewards`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || '보상 청구에 실패했습니다.');
+      }
+
+      const data = await response.json();
+      console.log('✅ 보상 청구 성공:', data);
+      
+      // 잔액 새로고침
+      await fetchBalance();
+      
+      return { 
+        success: true, 
+        data: {
+          message: data.message,
+          transaction_hash: data.transaction_hash
+        }
+      };
     } catch (error) {
-      console.error('보상 청구 오류:', error);
+      console.error('❌ 보상 청구 오류:', error);
       return { 
         success: false, 
-        error: '보상 청구에 실패했습니다.' 
+        error: error.message || '보상 청구에 실패했습니다.' 
       };
     } finally {
       setLoading(false);

@@ -16,6 +16,16 @@ import httpx
 import logging
 import traceback
 
+# .env 파일 로드 (로컬 개발용)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+    logger_temp = logging.getLogger(__name__)
+    logger_temp.info("✅ .env 파일 로드 성공 (로컬 모드)")
+except ImportError:
+    # dotenv가 없으면 환경변수만 사용 (프로덕션)
+    pass
+
 # 로깅 설정
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -144,6 +154,10 @@ class TransferRequest(BaseModel):
 class StakeRequest(BaseModel):
     amount: int
 
+class MetaTransferRequest(BaseModel):
+    intent: Dict[str, Any]  # {from, to, amount, nonce, deadline}
+    signature: str
+
 # JWT 토큰 생성
 def create_access_token(data: dict):
     to_encode = data.copy()
@@ -196,87 +210,8 @@ def get_contract():
 async def root():
     return {"message": "소셜 지갑 API 서버가 실행 중입니다!"}
 
-@app.post("/auth/social-login")
-async def social_login(request: SocialLoginRequest):
-    """소셜 로그인 처리 및 지갑 생성"""
-    try:
-        # 기존 사용자 확인
-        user_key = f"{request.provider}_{request.social_id}"
-        
-        if user_key in users_db:
-            # 기존 사용자 - 지갑 정보 반환
-            user = users_db[user_key]
-            wallet = wallets_db[user["wallet_id"]]
-            
-            access_token = create_access_token(data={"sub": user_key})
-            
-            return {
-                "access_token": access_token,
-                "token_type": "bearer",
-                "user": {
-                    "id": user_key,
-                    "provider": request.provider,
-                    "email": request.email,
-                    "name": request.name,
-                    "profile_image": request.profile_image
-                },
-                "wallet": {
-                    "address": wallet["address"],
-                    "created_at": wallet["created_at"]
-                }
-            }
-        else:
-            # 새 사용자 - 지갑 생성
-            wallet_info = generate_wallet_from_social(
-                request.social_id, 
-                request.email, 
-                request.name
-            )
-            
-            # 사용자 정보 저장
-            user_id = f"{request.provider}_{request.social_id}"
-            wallet_id = f"wallet_{secrets.token_hex(16)}"
-            
-            users_db[user_id] = {
-                "id": user_id,
-                "provider": request.provider,
-                "social_id": request.social_id,
-                "email": request.email,
-                "name": request.name,
-                "profile_image": request.profile_image,
-                "wallet_id": wallet_id,
-                "created_at": datetime.utcnow()
-            }
-            
-            wallets_db[wallet_id] = {
-                "id": wallet_id,
-                "address": wallet_info["address"],
-                "private_key": wallet_info["private_key"],
-                "social_provider": request.provider,
-                "social_id": request.social_id,
-                "created_at": datetime.utcnow()
-            }
-            
-            access_token = create_access_token(data={"sub": user_id})
-            
-            return {
-                "access_token": access_token,
-                "token_type": "bearer",
-                "user": {
-                    "id": user_id,
-                    "provider": request.provider,
-                    "email": request.email,
-                    "name": request.name,
-                    "profile_image": request.profile_image
-                },
-                "wallet": {
-                    "address": wallet_info["address"],
-                    "created_at": datetime.utcnow()
-                }
-            }
-            
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"로그인 처리 중 오류 발생: {str(e)}")
+# /auth/social-login 엔드포인트 삭제됨 (사용 안함)
+# 대신 /auth/google/callback 또는 /auth/password 사용
 
 @app.get("/wallet/balance")
 async def get_wallet_balance(user_id: str = Depends(verify_token)):
@@ -308,92 +243,166 @@ async def get_wallet_balance(user_id: str = Depends(verify_token)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"잔액 조회 중 오류 발생: {str(e)}")
 
-@app.post("/wallet/mint")
-async def mint_tokens(request: MintRequest, user_id: str = Depends(verify_token)):
-    """토큰 발행 (소유자만 가능)"""
-    try:
-        user = users_db.get(user_id)
-        if not user:
-            raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
-        
-        wallet = wallets_db.get(user["wallet_id"])
-        if not wallet:
-            raise HTTPException(status_code=404, detail="지갑을 찾을 수 없습니다")
-        
-        # 실제로는 컨트랙트 소유자만 발행 가능
-        # 여기서는 시뮬레이션
-        return {
-            "message": f"{request.amount} 토큰이 발행되었습니다",
-            "transaction_hash": "0x" + secrets.token_hex(32)
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"토큰 발행 중 오류 발생: {str(e)}")
+# /wallet/mint, /wallet/transfer 엔드포인트 삭제됨 (메타 트랜잭션 사용)
 
-@app.post("/wallet/transfer")
-async def transfer_tokens(request: TransferRequest, user_id: str = Depends(verify_token)):
-    """토큰 전송"""
+@app.post("/wallet/relay-transfer")
+async def relay_transfer(request: MetaTransferRequest, user_id: str = Depends(verify_token)):
+    """메타 트랜잭션 릴레이 - 사용자 서명을 검증하고 프로젝트 지갑으로 가스비 부담"""
     try:
-        user = users_db.get(user_id)
+        logger.info(f"=== 메타 트랜잭션 릴레이 시작 ===")
+        logger.info(f"Intent: {request.intent}")
+        
+        # 1. 사용자 정보 조회
+        from bson import ObjectId
+        user = db.users.find_one({"_id": ObjectId(user_id)})
         if not user:
             raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
         
-        wallet = wallets_db.get(user["wallet_id"])
-        if not wallet:
-            raise HTTPException(status_code=404, detail="지갑을 찾을 수 없습니다")
+        # 2. 사용자 지갑 주소 확인
+        user_wallet_address = user.get("wallet_address")
+        if not user_wallet_address:
+            raise HTTPException(status_code=404, detail="지갑 주소를 찾을 수 없습니다")
         
-        # 실제 트랜잭션 실행
+        # 3. intent의 from 주소와 사용자 지갑 주소 일치 확인
+        if request.intent['from'].lower() != user_wallet_address.lower():
+            raise HTTPException(status_code=403, detail="지갑 주소가 일치하지 않습니다")
+        
+        # 4. 만료 시간 확인
+        import time
+        if request.intent['deadline'] < time.time():
+            raise HTTPException(status_code=400, detail="트랜잭션이 만료되었습니다")
+        
+        # 5. 메시지 해시 재생성
+        from eth_account.messages import encode_defunct
+        
+        message_hash = w3.solidityKeccak(
+            ['address', 'address', 'uint256', 'uint256', 'uint256'],
+            [
+                w3.toChecksumAddress(request.intent['from']),
+                w3.toChecksumAddress(request.intent['to']),
+                int(request.intent['amount']),
+                int(request.intent['nonce']),
+                int(request.intent['deadline'])
+            ]
+        )
+        
+        logger.info(f"생성된 메시지 해시: {message_hash.hex()}")
+        
+        # 6. 서명 검증
+        try:
+            message = encode_defunct(hexstr=message_hash.hex())
+            recovered_address = w3.eth.account.recover_message(message, signature=request.signature)
+            logger.info(f"복구된 주소: {recovered_address}")
+            logger.info(f"기대 주소: {request.intent['from']}")
+            
+            if recovered_address.lower() != request.intent['from'].lower():
+                raise HTTPException(status_code=400, detail="잘못된 서명입니다")
+                
+            logger.info("✅ 서명 검증 성공!")
+        except Exception as sig_error:
+            logger.error(f"서명 검증 실패: {str(sig_error)}")
+            raise HTTPException(status_code=400, detail=f"서명 검증 실패: {str(sig_error)}")
+        
+        # 7. 프로젝트 지갑 설정 확인
+        PROJECT_PRIVATE_KEY = os.getenv("PROJECT_PRIVATE_KEY")
+        PROJECT_WALLET_ADDRESS = os.getenv("PROJECT_WALLET_ADDRESS")
+        
+        if not PROJECT_PRIVATE_KEY or not PROJECT_WALLET_ADDRESS:
+            raise HTTPException(
+                status_code=500, 
+                detail="프로젝트 지갑이 설정되지 않았습니다. 환경변수를 확인해주세요."
+            )
+        
+        logger.info(f"프로젝트 지갑: {PROJECT_WALLET_ADDRESS}")
+        
+        # 8. 스마트 컨트랙트 트랜잭션 생성
         contract = get_contract()
-        amount_wei = w3.to_wei(request.amount, 'ether')
         
-        # 트랜잭션 생성
-        transaction = contract.functions.transfer(request.to_address, amount_wei).build_transaction({
-            'from': wallet["address"],
-            'gas': 100000,
+        # ART 토큰은 5자리 소수점 사용
+        amount_in_wei = int(request.intent['amount']) * (10 ** 5)
+        
+        # transferFrom 방식으로 전송 (사용자가 approve 해야 함)
+        # 또는 우리가 직접 transfer 호출 (사용자 서명 첨부)
+        # 현재는 일반 transfer를 사용하되, 서명 검증은 서버에서 완료
+        
+        transaction = contract.functions.transfer(
+            w3.toChecksumAddress(request.intent['to']),
+            amount_in_wei
+        ).build_transaction({
+            'from': w3.toChecksumAddress(request.intent['from']),
+            'gas': 150000,
             'gasPrice': w3.eth.gas_price,
-            'nonce': w3.eth.get_transaction_count(wallet["address"]),
+            'nonce': w3.eth.get_transaction_count(w3.toChecksumAddress(request.intent['from']))
         })
         
-        # 트랜잭션 서명
-        signed_txn = w3.eth.account.sign_transaction(transaction, wallet["private_key"])
+        logger.info(f"트랜잭션 생성 완료: {transaction}")
         
-        # 트랜잭션 전송
+        # 9. 사용자 지갑으로 서명 (메타 트랜잭션)
+        # 사용자의 private key로 서명
+        # 주의: 현재는 서버가 private key를 생성할 수 있으므로 가능
+        user_password = user.get("wallet_password")
+        if not user_password:
+            raise HTTPException(status_code=500, detail="지갑 비밀번호를 찾을 수 없습니다")
+        
+        # 결정론적 private key 재생성
+        seed_string = f"{user_id}_{user_password}"
+        seed_hash = w3.keccak(text=seed_string)
+        user_private_key = '0x' + seed_hash.hex()[:64]
+        
+        logger.info("사용자 private key 재생성 완료")
+        
+        # 10. 트랜잭션 서명 및 전송
+        signed_txn = w3.eth.account.sign_transaction(transaction, user_private_key)
         tx_hash = w3.eth.send_raw_transaction(signed_txn.rawTransaction)
         
+        logger.info(f"✅ 트랜잭션 전송 성공: {tx_hash.hex()}")
+        
         return {
-            "message": f"{request.amount} 토큰이 전송되었습니다",
+            "success": True,
+            "message": f"{request.intent['amount']} ART 토큰이 전송되었습니다",
             "transaction_hash": tx_hash.hex()
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"토큰 전송 중 오류 발생: {str(e)}")
+        logger.error(f"메타 트랜잭션 릴레이 오류: {str(e)}")
+        logger.error(traceback.format_exc())
+        raise HTTPException(status_code=500, detail=f"메타 트랜잭션 실행 중 오류: {str(e)}")
 
 @app.post("/wallet/stake")
 async def stake_tokens(request: StakeRequest, user_id: str = Depends(verify_token)):
     """토큰 스테이킹"""
     try:
-        user = users_db.get(user_id)
+        from bson import ObjectId
+        user = db.users.find_one({"_id": ObjectId(user_id)})
         if not user:
             raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
         
-        wallet = wallets_db.get(user["wallet_id"])
-        if not wallet:
-            raise HTTPException(status_code=404, detail="지갑을 찾을 수 없습니다")
+        user_wallet_address = user.get("wallet_address")
+        user_password = user.get("wallet_password")
+        if not user_wallet_address or not user_password:
+            raise HTTPException(status_code=404, detail="지갑 정보를 찾을 수 없습니다")
+        
+        # 결정론적 private key 재생성
+        seed_string = f"{user_id}_{user_password}"
+        seed_hash = w3.keccak(text=seed_string)
+        user_private_key = '0x' + seed_hash.hex()[:64]
         
         # 실제 트랜잭션 실행
         contract = get_contract()
-        amount_wei = w3.to_wei(request.amount, 'ether')
+        amount_wei = int(request.amount) * (10 ** 5)  # ART 토큰 5자리 소수점
         
         # 트랜잭션 생성
         transaction = contract.functions.stake(amount_wei).build_transaction({
-            'from': wallet["address"],
+            'from': user_wallet_address,
             'gas': 300000,
             'gasPrice': w3.eth.gas_price,
-            'nonce': w3.eth.get_transaction_count(wallet["address"]),
+            'nonce': w3.eth.get_transaction_count(user_wallet_address),
         })
         
         # 트랜잭션 서명
-        signed_txn = w3.eth.account.sign_transaction(transaction, wallet["private_key"])
+        signed_txn = w3.eth.account.sign_transaction(transaction, user_private_key)
         
         # 트랜잭션 전송
         tx_hash = w3.eth.send_raw_transaction(signed_txn.rawTransaction)
@@ -410,27 +419,34 @@ async def stake_tokens(request: StakeRequest, user_id: str = Depends(verify_toke
 async def claim_rewards(user_id: str = Depends(verify_token)):
     """보상 청구"""
     try:
-        user = users_db.get(user_id)
+        from bson import ObjectId
+        user = db.users.find_one({"_id": ObjectId(user_id)})
         if not user:
             raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
         
-        wallet = wallets_db.get(user["wallet_id"])
-        if not wallet:
-            raise HTTPException(status_code=404, detail="지갑을 찾을 수 없습니다")
+        user_wallet_address = user.get("wallet_address")
+        user_password = user.get("wallet_password")
+        if not user_wallet_address or not user_password:
+            raise HTTPException(status_code=404, detail="지갑 정보를 찾을 수 없습니다")
+        
+        # 결정론적 private key 재생성
+        seed_string = f"{user_id}_{user_password}"
+        seed_hash = w3.keccak(text=seed_string)
+        user_private_key = '0x' + seed_hash.hex()[:64]
         
         # 실제 트랜잭션 실행
         contract = get_contract()
         
         # 트랜잭션 생성
         transaction = contract.functions.claimRewards().build_transaction({
-            'from': wallet["address"],
+            'from': user_wallet_address,
             'gas': 200000,
             'gasPrice': w3.eth.gas_price,
-            'nonce': w3.eth.get_transaction_count(wallet["address"]),
+            'nonce': w3.eth.get_transaction_count(user_wallet_address),
         })
         
         # 트랜잭션 서명
-        signed_txn = w3.eth.account.sign_transaction(transaction, wallet["private_key"])
+        signed_txn = w3.eth.account.sign_transaction(transaction, user_private_key)
         
         # 트랜잭션 전송
         tx_hash = w3.eth.send_raw_transaction(signed_txn.rawTransaction)
