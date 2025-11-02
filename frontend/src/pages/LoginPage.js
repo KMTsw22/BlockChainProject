@@ -48,7 +48,10 @@ const LoginPage = () => {
       setError('');
       console.log('🔵 OAuth code 받음, 백엔드로 전송 중...');
       
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      const apiUrl = process.env.REACT_APP_API_URL || null;
+      if (!apiUrl) {
+        throw new Error('API_URL 환경변수가 설정되지 않았습니다.');
+      }
       const result = await fetch(`${apiUrl}/auth/google/callback`, {
         method: 'POST',
         headers: {
@@ -127,7 +130,19 @@ const LoginPage = () => {
       return;
     }
     
-    const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID || '642921295-hbu979qt4a2ndq1ucpf4j8v83kmfs8mk.apps.googleusercontent.com';
+    const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID || null;
+    
+    // 환경변수 디버깅
+    console.log('🔍 환경변수 확인:');
+    console.log('  GOOGLE_CLIENT_ID:', clientId ? `${clientId.substring(0, 10)}...` : 'null (설정되지 않음)');
+    console.log('  CONTRACT_ADDRESS:', process.env.REACT_APP_CONTRACT_ADDRESS || 'null');
+    console.log('  API_URL:', process.env.REACT_APP_API_URL || 'null');
+    
+    if (!clientId) {
+      console.error('❌ REACT_APP_GOOGLE_CLIENT_ID가 설정되지 않았습니다!');
+      console.error('   .env 파일에 REACT_APP_GOOGLE_CLIENT_ID를 추가해주세요.');
+    }
+    
     const redirectUri = window.location.origin + '/login'; // /login으로 콜백
     const scope = 'openid email profile';
     const state = btoa(JSON.stringify({ timestamp: Date.now(), returnPath: window.location.pathname }));
@@ -179,7 +194,12 @@ const LoginPage = () => {
     setPasswordError('');
 
     try {
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      const apiUrl = process.env.REACT_APP_API_URL || null;
+      if (!apiUrl) {
+        setError('API_URL 환경변수가 설정되지 않았습니다.');
+        setLoading(false);
+        return;
+      }
       
       // 디버깅: 전송할 데이터 확인
       console.log('🔍 전송할 데이터:', {

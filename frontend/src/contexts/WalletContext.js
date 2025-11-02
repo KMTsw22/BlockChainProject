@@ -23,7 +23,6 @@ export const WalletProvider = ({ children }) => {
   });
   const [loading, setLoading] = useState(false);
   const [welcomeBonusStatusState, setWelcomeBonusStatusState] = useState(() => {
-    // localStorage에서 환영 보너스 상태 복원
     const saved = localStorage.getItem('welcome_bonus_status');
     if (saved) {
       try {
@@ -39,18 +38,15 @@ export const WalletProvider = ({ children }) => {
     };
   });
 
-  // welcomeBonusStatus setter - localStorage 자동 저장 + UI 업데이트
   const setWelcomeBonusStatus = (newStatus) => {
     setWelcomeBonusStatusState(newStatus);
     localStorage.setItem('welcome_bonus_status', JSON.stringify(newStatus));
   };
 
-  // localStorage만 저장 (UI 업데이트 없음)
   const saveWelcomeBonusStatusToStorage = (newStatus) => {
     localStorage.setItem('welcome_bonus_status', JSON.stringify(newStatus));
   };
 
-  // localStorage에서 상태를 읽어서 UI에 반영
   const syncWelcomeBonusStatusFromStorage = () => {
     const saved = localStorage.getItem('welcome_bonus_status');
     if (saved) {
@@ -64,34 +60,32 @@ export const WalletProvider = ({ children }) => {
 
   const welcomeBonusStatus = welcomeBonusStatusState;
 
-  // Web3 설정
-  const SEPOLIA_RPC_URL = process.env.REACT_APP_WEB3_RPC_URL || 'https://sepolia.infura.io/v3/e8630d4f3cd6413ea851365717502af4';
-  const CONTRACT_ADDRESS = process.env.REACT_APP_CONTRACT_ADDRESS || '0x96850830c5c5c62A151Cc41f14558F76ab2Bb55f'; // AdvancedRewardToken 스마트 컨트랙트
+  const SEPOLIA_RPC_URL = process.env.REACT_APP_WEB3_PROVIDER || null;
+  const CONTRACT_ADDRESS = process.env.REACT_APP_CONTRACT_ADDRESS || null;
   
-  // Web3 인스턴스 생성 (useMemo로 최적화)
+  useEffect(() => {
+    if (!CONTRACT_ADDRESS) {
+      console.error('필수 환경변수가 설정되지 않았습니다: REACT_APP_CONTRACT_ADDRESS');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  
   const web3 = useMemo(() => new Web3(SEPOLIA_RPC_URL), [SEPOLIA_RPC_URL]);
   
-  // 트랜잭션 완료 대기 함수
   // eslint-disable-next-line no-unused-vars
   const waitForTransactionCompletion = async (txHash, maxAttempts = 30) => {
-    console.log('⏳ 트랜잭션 완료 대기 중...');
     
     for (let i = 0; i < maxAttempts; i++) {
       try {
         const receipt = await web3.eth.getTransactionReceipt(txHash);
         if (receipt && receipt.status) {
-          console.log('✅ 트랜잭션 완료 확인됨!');
           return receipt;
         }
       } catch (error) {
-        console.log(`⏳ 트랜잭션 대기 중... (${i + 1}/${maxAttempts})`);
+        // 트랜잭션 대기 중
       }
-      
-      // 2초 대기
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
-    
-    console.log('⚠️ 트랜잭션 완료 대기 시간 초과, 잔액 새로고침을 계속 진행합니다.');
     return null;
   };
   
@@ -121,6 +115,9 @@ export const WalletProvider = ({ children }) => {
       }
     ];
     
+    if (!CONTRACT_ADDRESS) {
+      throw new Error('CONTRACT_ADDRESS 환경변수가 설정되지 않았습니다.');
+    }
     return new web3.eth.Contract(ART_ABI, CONTRACT_ADDRESS);
   }, [web3, CONTRACT_ADDRESS]);
 
@@ -175,7 +172,11 @@ export const WalletProvider = ({ children }) => {
           
           // 서버에 환영 보너스 요청
           try {
-            const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+            const apiUrl = process.env.REACT_APP_API_URL || null;
+            if (!apiUrl) {
+              console.error('❌ API_URL 환경변수가 설정되지 않았습니다.');
+              return;
+            }
             const response = await fetch(`${apiUrl}/wallet/welcome-bonus`, {
               method: 'POST',
               headers: {
@@ -283,27 +284,6 @@ export const WalletProvider = ({ children }) => {
       
       setBalance(newBalance);
       
-      console.log(`🪙 ART 토큰 잔액: ${balanceInTokens} ART`);
-      console.log(`🔒 스테이킹된 양: ${stakedAmount} ART`);
-      console.log(`🎁 대기 중인 보상: ${pendingRewards} ART`);
-      console.log(`✅ 스테이킹 활성화: ${stakeInfo.isActive}`);
-      
-      // 강제 리렌더링을 위한 상태 업데이트
-      setTimeout(() => {
-        console.log('🔄 UI 강제 업데이트 시도:', {
-          balance: balanceInTokens,
-          staked_amount: stakedAmount,
-          pending_rewards: pendingRewards,
-          is_staking_active: stakeInfo.isActive
-        });
-        setBalance({
-          balance: balanceInTokens,
-          staked_amount: stakedAmount,
-          pending_rewards: pendingRewards,
-          is_staking_active: stakeInfo.isActive
-        });
-      }, 100);
-      
     } catch (error) {
       console.error('❌ 잔액 조회 실패:', error);
     } finally {
@@ -341,10 +321,6 @@ export const WalletProvider = ({ children }) => {
       const stakedAmount = (parseInt(stakeInfo.amount) / Math.pow(10, 5)).toFixed(2);
       const pendingReward = (parseInt(stakeInfo.pendingReward) / Math.pow(10, 5)).toFixed(2);
       
-      console.log(`🪙 ART 토큰 잔액: ${artBalanceFormatted} ART`);
-      console.log(`🔒 스테이킹된 양: ${stakedAmount} ART`);
-      console.log(`🎁 대기 중인 보상: ${pendingReward} ART`);
-      console.log(`✅ 스테이킹 활성화: ${stakeInfo.isActive}`);
       
       const newBalance = {
         balance: artBalanceFormatted,
@@ -360,7 +336,6 @@ export const WalletProvider = ({ children }) => {
       
       // 강제 리렌더링을 위한 추가 상태 업데이트
       setTimeout(() => {
-        console.log('🔄 fetchBalance UI 강제 업데이트 시도:', newBalance);
         setBalance(newBalance);
       }, 100);
     } catch (error) {
@@ -388,9 +363,15 @@ export const WalletProvider = ({ children }) => {
     try {
       setLoading(true);
       
-      console.log(`🔄 토큰 발행 시작: ${amount}개`);
       
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      const apiUrl = process.env.REACT_APP_API_URL || null;
+      if (!apiUrl) {
+        setLoading(false);
+        return { 
+          success: false, 
+          error: 'API_URL 환경변수가 설정되지 않았습니다.' 
+        };
+      }
       const response = await fetch(`${apiUrl}/wallet/mint`, {
         method: 'POST',
         headers: {
@@ -408,7 +389,6 @@ export const WalletProvider = ({ children }) => {
       }
 
       const data = await response.json();
-      console.log('✅ 토큰 발행 성공:', data);
       
       // 잔액 새로고침
       await fetchBalance();
@@ -450,52 +430,80 @@ export const WalletProvider = ({ children }) => {
     try {
       setLoading(true);
       
-      console.log(`🔄 메타 트랜잭션 시작: ${amount}개 ${walletInfo.address} → ${toAddress}`);
+      if (!CONTRACT_ADDRESS) {
+        return {
+          success: false,
+          error: '환경변수가 설정되지 않았습니다. .env 파일을 확인해주세요.'
+        };
+      }
       
-      // 1. Intent(의도) 생성
-      const nonce = Date.now(); // 간단한 nonce (실제로는 DB에서 관리 추천)
-      const deadline = Math.floor(Date.now() / 1000) + 3600; // 1시간 유효
+      const checksumTo = web3.utils.toChecksumAddress(toAddress);
+      const checksumFrom = web3.utils.toChecksumAddress(walletInfo.address);
       
-      const intent = {
-        from: walletInfo.address,
-        to: toAddress,
-        amount: parseInt(amount),
-        nonce: nonce,
-        deadline: deadline
+      const tokenABI = [
+        {
+          "constant": false,
+          "inputs": [
+            {"name": "to", "type": "address"},
+            {"name": "amount", "type": "uint256"}
+          ],
+          "name": "transfer",
+          "outputs": [{"name": "", "type": "bool"}],
+          "type": "function"
+        }
+      ];
+      
+      const tokenContract = new web3.eth.Contract(tokenABI, CONTRACT_ADDRESS);
+      const amountWei = parseInt(amount) * (10 ** 5);
+      const userNonce = await web3.eth.getTransactionCount(checksumFrom);
+      const transaction = tokenContract.methods.transfer(checksumTo, amountWei).encodeABI();
+      const gasPrice = await web3.eth.getGasPrice();
+      
+      const tx = {
+        from: checksumFrom,
+        to: CONTRACT_ADDRESS,
+        data: transaction,
+        gas: 100000,
+        gasPrice: gasPrice,
+        nonce: userNonce
       };
       
-      console.log('📝 Intent 생성:', intent);
+      const account = web3.eth.accounts.privateKeyToAccount(walletInfo.private_key);
+      const signedTx = await account.signTransaction(tx);
       
-      // 2. 메시지 해시 생성 (Solidity의 keccak256과 동일한 방식)
-      const messageHash = web3.utils.soliditySha3(
-        { type: 'address', value: intent.from },
-        { type: 'address', value: intent.to },
-        { type: 'uint256', value: intent.amount },
-        { type: 'uint256', value: intent.nonce },
-        { type: 'uint256', value: intent.deadline }
-      );
+      let rawTxHex = signedTx?.rawTransaction || signedTx?.raw || signedTx?.rawTransaction?.raw || signedTx;
       
-      console.log('🔐 메시지 해시:', messageHash);
+      if (!rawTxHex) {
+        console.error('트랜잭션 서명 실패: rawTransaction을 찾을 수 없습니다.', signedTx);
+        throw new Error('트랜잭션 서명 실패: rawTransaction을 찾을 수 없습니다.');
+      }
       
-      // 3. Private Key로 서명 (오프체인 = 가스비 무료!)
-      const signature = await web3.eth.accounts.sign(
-        messageHash,
-        walletInfo.private_key
-      );
+      if (typeof rawTxHex !== 'string') {
+        rawTxHex = '0x' + Array.from(rawTxHex)
+          .map(byte => byte.toString(16).padStart(2, '0'))
+          .join('');
+      }
       
-      console.log('✍️ 서명 완료:', signature.signature);
+      if (!rawTxHex.startsWith('0x')) {
+        rawTxHex = '0x' + rawTxHex;
+      }
+      const apiUrl = process.env.REACT_APP_API_URL || null;
+      if (!apiUrl) {
+        setLoading(false);
+        return { 
+          success: false, 
+          error: 'API_URL 환경변수가 설정되지 않았습니다.' 
+        };
+      }
       
-      // 4. 서버에 Intent + Signature 전송 (메타 트랜잭션 릴레이)
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-      const response = await fetch(`${apiUrl}/wallet/relay-transfer`, {
+      const response = await fetch(`${apiUrl}/wallet/transfer`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          intent: intent,
-          signature: signature.signature
+          signed_transaction: rawTxHex
         })
       });
 
@@ -505,22 +513,19 @@ export const WalletProvider = ({ children }) => {
       }
 
       const data = await response.json();
-      console.log('✅ 메타 트랜잭션 성공:', data);
-      
-      // 잔액 새로고침
       await fetchBalance();
       
       return { 
         success: true, 
         data: {
-          message: data.message,
+          message: data.message || '토큰 전송이 완료되었습니다.',
           transaction_hash: data.transaction_hash,
           to_address: toAddress,
           amount: amount
         }
       };
     } catch (error) {
-      console.error('❌ 메타 트랜잭션 오류:', error);
+      console.error('❌ 토큰 전송 오류:', error);
       return { 
         success: false, 
         error: error.message || '토큰 전송에 실패했습니다.' 
@@ -541,9 +546,15 @@ export const WalletProvider = ({ children }) => {
     try {
       setLoading(true);
       
-      console.log(`🔄 토큰 스테이킹 시작: ${amount}개`);
       
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      const apiUrl = process.env.REACT_APP_API_URL || null;
+      if (!apiUrl) {
+        setLoading(false);
+        return { 
+          success: false, 
+          error: 'API_URL 환경변수가 설정되지 않았습니다.' 
+        };
+      }
       const response = await fetch(`${apiUrl}/wallet/stake`, {
         method: 'POST',
         headers: {
@@ -561,7 +572,6 @@ export const WalletProvider = ({ children }) => {
       }
 
       const data = await response.json();
-      console.log('✅ 스테이킹 성공:', data);
       
       // 잔액 새로고침
       await fetchBalance();
@@ -596,9 +606,15 @@ export const WalletProvider = ({ children }) => {
     try {
       setLoading(true);
       
-      console.log('🔄 보상 청구 시작');
       
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      const apiUrl = process.env.REACT_APP_API_URL || null;
+      if (!apiUrl) {
+        setLoading(false);
+        return { 
+          success: false, 
+          error: 'API_URL 환경변수가 설정되지 않았습니다.' 
+        };
+      }
       const response = await fetch(`${apiUrl}/wallet/claim-rewards`, {
         method: 'POST',
         headers: {
@@ -613,7 +629,6 @@ export const WalletProvider = ({ children }) => {
       }
 
       const data = await response.json();
-      console.log('✅ 보상 청구 성공:', data);
       
       // 잔액 새로고침
       await fetchBalance();

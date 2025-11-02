@@ -54,7 +54,12 @@ const PublicWalletsPage = () => {
       setLoading(true);
       setError('');
 
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      const apiUrl = process.env.REACT_APP_API_URL || null;
+      if (!apiUrl) {
+        setError('API_URL 환경변수가 설정되지 않았습니다.');
+        setLoading(false);
+        return;
+      }
       const response = await fetch(`${apiUrl}/public/wallets`);
 
       if (!response.ok) {
@@ -126,6 +131,10 @@ const PublicWalletsPage = () => {
       setError('올바른 금액을 입력해주세요.');
       return;
     }
+
+    console.log('🎯 송금 다이얼로그에서 선택된 지갑:', selectedWallet);
+    console.log('📥 받는 사람 주소:', selectedWallet.wallet_address);
+    console.log('💰 송금량:', sendAmount);
 
     try {
       const result = await transferTokens(selectedWallet.wallet_address, parseInt(sendAmount));
@@ -384,6 +393,7 @@ const PublicWalletsPage = () => {
                     wordBreak: 'break-all',
                     display: 'block',
                     backgroundColor: 'white',
+                    color: '#000',
                     p: 1,
                     borderRadius: 0.5
                   }}

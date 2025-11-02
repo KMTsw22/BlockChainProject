@@ -8,6 +8,7 @@
     "@mui/icons-material": "5.15.0",
     "@mui/material": "5.15.0",
     "axios": "1.6.2",
+    "dotenv-cli": "^7.0.0",
     "react": "18.2.0",
     "react-dom": "18.2.0",
     "react-router-dom": "6.8.1",
@@ -15,9 +16,8 @@
     "web3": "^4.16.0"
   },
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "vercel-build": "react-scripts build",
+    "start": "dotenv -e ../.env react-scripts start",
+    "build": "dotenv -e ../.env react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
   },
@@ -38,5 +38,7 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
+  },
+  "devDependencies": {
   }
 }

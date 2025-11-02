@@ -9,7 +9,6 @@ import jwt
 import hashlib
 import secrets
 from web3 import Web3
-import json
 from google.auth.transport import requests
 from google.oauth2 import id_token
 import httpx
@@ -61,7 +60,12 @@ WEB3_PROVIDER = os.getenv("WEB3_PROVIDER", "https://sepolia.infura.io/v3/YOUR_IN
 w3 = Web3(Web3.HTTPProvider(WEB3_PROVIDER))
 
 # 스마트 컨트랙트 설정
-CONTRACT_ADDRESS = os.getenv("CONTRACT_ADDRESS", "0x96850830c5c5c62A151Cc41f14558F76ab2Bb55f")
+CONTRACT_ADDRESS = os.getenv("CONTRACT_ADDRESS") or None
+
+# 주소가 없으면 경고
+if not CONTRACT_ADDRESS:
+    logger.warning("⚠️ 환경변수가 설정되지 않았습니다!")
+    logger.warning("필요한 환경변수: CONTRACT_ADDRESS")
 CONTRACT_ABI = [
     {
         "inputs": [],
@@ -154,9 +158,8 @@ class TransferRequest(BaseModel):
 class StakeRequest(BaseModel):
     amount: int
 
-class MetaTransferRequest(BaseModel):
-    intent: Dict[str, Any]  # {from, to, amount, nonce, deadline}
-    signature: str
+class SignedTransferRequest(BaseModel):
+    signed_transaction: str  # 서명된 트랜잭션 (hex 문자열)
 
 # JWT 토큰 생성
 def create_access_token(data: dict):
@@ -205,13 +208,12 @@ def generate_wallet_from_social(social_id: str, email: str, name: str) -> Dict[s
 def get_contract():
     return w3.eth.contract(address=CONTRACT_ADDRESS, abi=CONTRACT_ABI)
 
+
 # API 엔드포인트들
 @app.get("/")
 async def root():
     return {"message": "소셜 지갑 API 서버가 실행 중입니다!"}
 
-# /auth/social-login 엔드포인트 삭제됨 (사용 안함)
-# 대신 /auth/google/callback 또는 /auth/password 사용
 
 @app.get("/wallet/balance")
 async def get_wallet_balance(user_id: str = Depends(verify_token)):
@@ -243,132 +245,111 @@ async def get_wallet_balance(user_id: str = Depends(verify_token)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"잔액 조회 중 오류 발생: {str(e)}")
 
-# /wallet/mint, /wallet/transfer 엔드포인트 삭제됨 (메타 트랜잭션 사용)
-
-@app.post("/wallet/relay-transfer")
-async def relay_transfer(request: MetaTransferRequest, user_id: str = Depends(verify_token)):
-    """메타 트랜잭션 릴레이 - 사용자 서명을 검증하고 프로젝트 지갑으로 가스비 부담"""
+@app.post("/wallet/transfer")
+async def transfer_tokens(request: SignedTransferRequest, user_id: str = Depends(verify_token)):
+    """서명된 트랜잭션을 받아서 가스비 확인 후 전송"""
     try:
-        logger.info(f"=== 메타 트랜잭션 릴레이 시작 ===")
-        logger.info(f"Intent: {request.intent}")
-        
-        # 1. 사용자 정보 조회
         from bson import ObjectId
+        
+        # 사용자 정보 조회
         user = db.users.find_one({"_id": ObjectId(user_id)})
         if not user:
             raise HTTPException(status_code=404, detail="사용자를 찾을 수 없습니다")
         
-        # 2. 사용자 지갑 주소 확인
         user_wallet_address = user.get("wallet_address")
         if not user_wallet_address:
-            raise HTTPException(status_code=404, detail="지갑 주소를 찾을 수 없습니다")
+            raise HTTPException(status_code=404, detail="지갑 정보를 찾을 수 없습니다")
         
-        # 3. intent의 from 주소와 사용자 지갑 주소 일치 확인
-        if request.intent['from'].lower() != user_wallet_address.lower():
-            raise HTTPException(status_code=403, detail="지갑 주소가 일치하지 않습니다")
-        
-        # 4. 만료 시간 확인
-        import time
-        if request.intent['deadline'] < time.time():
-            raise HTTPException(status_code=400, detail="트랜잭션이 만료되었습니다")
-        
-        # 5. 메시지 해시 재생성
-        from eth_account.messages import encode_defunct
-        
-        message_hash = w3.solidityKeccak(
-            ['address', 'address', 'uint256', 'uint256', 'uint256'],
-            [
-                w3.toChecksumAddress(request.intent['from']),
-                w3.toChecksumAddress(request.intent['to']),
-                int(request.intent['amount']),
-                int(request.intent['nonce']),
-                int(request.intent['deadline'])
-            ]
-        )
-        
-        logger.info(f"생성된 메시지 해시: {message_hash.hex()}")
-        
-        # 6. 서명 검증
-        try:
-            message = encode_defunct(hexstr=message_hash.hex())
-            recovered_address = w3.eth.account.recover_message(message, signature=request.signature)
-            logger.info(f"복구된 주소: {recovered_address}")
-            logger.info(f"기대 주소: {request.intent['from']}")
-            
-            if recovered_address.lower() != request.intent['from'].lower():
-                raise HTTPException(status_code=400, detail="잘못된 서명입니다")
-                
-            logger.info("✅ 서명 검증 성공!")
-        except Exception as sig_error:
-            logger.error(f"서명 검증 실패: {str(sig_error)}")
-            raise HTTPException(status_code=400, detail=f"서명 검증 실패: {str(sig_error)}")
-        
-        # 7. 프로젝트 지갑 설정 확인
-        PROJECT_PRIVATE_KEY = os.getenv("PROJECT_PRIVATE_KEY")
+        # 환경 변수 확인
         PROJECT_WALLET_ADDRESS = os.getenv("PROJECT_WALLET_ADDRESS")
+        PROJECT_PRIVATE_KEY = os.getenv("PROJECT_PRIVATE_KEY")
         
-        if not PROJECT_PRIVATE_KEY or not PROJECT_WALLET_ADDRESS:
-            raise HTTPException(
-                status_code=500, 
-                detail="프로젝트 지갑이 설정되지 않았습니다. 환경변수를 확인해주세요."
-            )
+        if not PROJECT_WALLET_ADDRESS or not PROJECT_PRIVATE_KEY:
+            raise HTTPException(status_code=500, detail="프로젝트 지갑 정보가 설정되지 않았습니다")
         
-        logger.info(f"프로젝트 지갑: {PROJECT_WALLET_ADDRESS}")
+        # 서명된 트랜잭션에서 발신자 주소 복구
+        try:
+            signed_tx_hex = request.signed_transaction
+            if not signed_tx_hex.startswith('0x'):
+                signed_tx_hex = '0x' + signed_tx_hex
+            
+            # 서명된 트랜잭션에서 from 주소 복구 (서명 검증)
+            tx_from = w3.eth.account.recover_transaction(signed_tx_hex)
+            
+            # 사용자 지갑 주소와 일치하는지 확인
+            if tx_from.lower() != user_wallet_address.lower():
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"트랜잭션 발신자 주소가 일치하지 않습니다. 예상: {user_wallet_address}, 실제: {tx_from}"
+                )
+            
+            logger.info(f"트랜잭션 발신자: {tx_from}")
+            
+        except ValueError as e:
+            logger.error(f"트랜잭션 복구 실패 (잘못된 형식): {str(e)}")
+            raise HTTPException(status_code=400, detail=f"잘못된 트랜잭션 형식: {str(e)}")
+        except Exception as e:
+            logger.error(f"트랜잭션 처리 실패: {str(e)}")
+            raise HTTPException(status_code=400, detail=f"잘못된 트랜잭션 형식: {str(e)}")
         
-        # 8. 스마트 컨트랙트 트랜잭션 생성
-        contract = get_contract()
+        # 사용자 지갑 가스비 확인
+        user_balance = w3.eth.get_balance(tx_from)
+        user_balance_eth = user_balance / (10 ** 18)
         
-        # ART 토큰은 5자리 소수점 사용
-        amount_in_wei = int(request.intent['amount']) * (10 ** 5)
+        current_gas_price = w3.eth.gas_price
+        gas_limit = 100000
+        estimated_cost = current_gas_price * gas_limit
         
-        # transferFrom 방식으로 전송 (사용자가 approve 해야 함)
-        # 또는 우리가 직접 transfer 호출 (사용자 서명 첨부)
-        # 현재는 일반 transfer를 사용하되, 서명 검증은 서버에서 완료
+        if user_balance < estimated_cost:
+            fund_amount = estimated_cost * 2
+            project_account = w3.eth.account.from_key(PROJECT_PRIVATE_KEY)
+            fund_nonce = w3.eth.get_transaction_count(PROJECT_WALLET_ADDRESS)
+            
+            fund_tx = {
+                'from': PROJECT_WALLET_ADDRESS,
+                'to': tx_from,
+                'value': fund_amount,
+                'gas': 21000,
+                'gasPrice': w3.eth.gas_price,
+                'nonce': fund_nonce
+            }
+            
+            signed_fund_tx = project_account.sign_transaction(fund_tx)
+            fund_tx_hash = w3.eth.send_raw_transaction(signed_fund_tx.rawTransaction)
+            w3.eth.wait_for_transaction_receipt(fund_tx_hash, timeout=120)
+            logger.info(f"가스비 충전 완료: {fund_tx_hash.hex()}")
+            user_balance = w3.eth.get_balance(tx_from)
+        tx_hash = w3.eth.send_raw_transaction(signed_tx_hex)
+        tx_receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=120)
         
-        transaction = contract.functions.transfer(
-            w3.toChecksumAddress(request.intent['to']),
-            amount_in_wei
-        ).build_transaction({
-            'from': w3.toChecksumAddress(request.intent['from']),
-            'gas': 150000,
-            'gasPrice': w3.eth.gas_price,
-            'nonce': w3.eth.get_transaction_count(w3.toChecksumAddress(request.intent['from']))
-        })
+        if tx_receipt.status != 1:
+            raise HTTPException(status_code=500, detail="트랜잭션 실패")
         
-        logger.info(f"트랜잭션 생성 완료: {transaction}")
-        
-        # 9. 사용자 지갑으로 서명 (메타 트랜잭션)
-        # 사용자의 private key로 서명
-        # 주의: 현재는 서버가 private key를 생성할 수 있으므로 가능
-        user_password = user.get("wallet_password")
-        if not user_password:
-            raise HTTPException(status_code=500, detail="지갑 비밀번호를 찾을 수 없습니다")
-        
-        # 결정론적 private key 재생성
-        seed_string = f"{user_id}_{user_password}"
-        seed_hash = w3.keccak(text=seed_string)
-        user_private_key = '0x' + seed_hash.hex()[:64]
-        
-        logger.info("사용자 private key 재생성 완료")
-        
-        # 10. 트랜잭션 서명 및 전송
-        signed_txn = w3.eth.account.sign_transaction(transaction, user_private_key)
-        tx_hash = w3.eth.send_raw_transaction(signed_txn.rawTransaction)
-        
-        logger.info(f"✅ 트랜잭션 전송 성공: {tx_hash.hex()}")
+        # 트랜잭션 정보 저장
+        transaction_data = {
+            "user_id": ObjectId(user_id),
+            "wallet_address": tx_from,
+            "transaction_hash": tx_hash.hex(),
+            "transaction_type": "transfer",
+            "status": "completed",
+            "created_at": datetime.now(),
+            "updated_at": datetime.now()
+        }
+        db.transactions.insert_one(transaction_data)
         
         return {
             "success": True,
-            "message": f"{request.intent['amount']} ART 토큰이 전송되었습니다",
-            "transaction_hash": tx_hash.hex()
+            "message": "토큰이 전송되었습니다",
+            "transaction_hash": tx_hash.hex(),
+            "gas_used": tx_receipt['gasUsed']
         }
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"메타 트랜잭션 릴레이 오류: {str(e)}")
+        logger.error(f"토큰 전송 오류: {str(e)}")
         logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"메타 트랜잭션 실행 중 오류: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"토큰 전송 중 오류: {str(e)}")
 
 @app.post("/wallet/stake")
 async def stake_tokens(request: StakeRequest, user_id: str = Depends(verify_token)):
@@ -387,7 +368,7 @@ async def stake_tokens(request: StakeRequest, user_id: str = Depends(verify_toke
         # 결정론적 private key 재생성
         seed_string = f"{user_id}_{user_password}"
         seed_hash = w3.keccak(text=seed_string)
-        user_private_key = '0x' + seed_hash.hex()[:64]
+        user_private_key = '0x' + seed_hash.hex()  # 32바이트 = 64자리 hex
         
         # 실제 트랜잭션 실행
         contract = get_contract()
@@ -402,7 +383,7 @@ async def stake_tokens(request: StakeRequest, user_id: str = Depends(verify_toke
         })
         
         # 트랜잭션 서명
-        signed_txn = w3.eth.account.sign_transaction(transaction, user_private_key)
+        signed_txn = w3.eth.account.sign_transaction(transaction, private_key=user_private_key)
         
         # 트랜잭션 전송
         tx_hash = w3.eth.send_raw_transaction(signed_txn.rawTransaction)
@@ -432,7 +413,7 @@ async def claim_rewards(user_id: str = Depends(verify_token)):
         # 결정론적 private key 재생성
         seed_string = f"{user_id}_{user_password}"
         seed_hash = w3.keccak(text=seed_string)
-        user_private_key = '0x' + seed_hash.hex()[:64]
+        user_private_key = '0x' + seed_hash.hex()  # 32바이트 = 64자리 hex
         
         # 실제 트랜잭션 실행
         contract = get_contract()
@@ -446,7 +427,7 @@ async def claim_rewards(user_id: str = Depends(verify_token)):
         })
         
         # 트랜잭션 서명
-        signed_txn = w3.eth.account.sign_transaction(transaction, user_private_key)
+        signed_txn = w3.eth.account.sign_transaction(transaction, private_key=user_private_key)
         
         # 트랜잭션 전송
         tx_hash = w3.eth.send_raw_transaction(signed_txn.rawTransaction)
@@ -554,7 +535,7 @@ async def give_deterministic_welcome_bonus(user_address, user_id=None):
         })
         
         # 트랜잭션 서명 및 전송
-        signed_txn = w3.eth.account.sign_transaction(transaction, PROJECT_PRIVATE_KEY)
+        signed_txn = w3.eth.account.sign_transaction(transaction, private_key=PROJECT_PRIVATE_KEY)
         tx_hash = w3.eth.send_raw_transaction(signed_txn.rawTransaction)
         
         # 트랜잭션 완료 대기

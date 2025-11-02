@@ -39,7 +39,7 @@ const SettingsPage = () => {
           return;
         }
 
-        const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+        const apiUrl = process.env.REACT_APP_API_URL || null;
         const response = await fetch(`${apiUrl}/user/settings`, {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -76,7 +76,12 @@ const SettingsPage = () => {
       setError('');
 
       const token = localStorage.getItem('access_token') || localStorage.getItem('token');
-      const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+      const apiUrl = process.env.REACT_APP_API_URL || null;
+      if (!apiUrl) {
+        setError('REACT_APP_API_URL 환경변수가 설정되지 않았습니다.');
+        setSaving(false);
+        return;
+      }
 
       const response = await fetch(`${apiUrl}/user/settings`, {
         method: 'PUT',
@@ -93,7 +98,7 @@ const SettingsPage = () => {
         throw new Error('설정 저장에 실패했습니다');
       }
 
-      const data = await response.json();
+      await response.json(); // 응답 확인
       setShowWalletPublic(newValue);
       setSnackbarMessage(newValue ? '지갑 주소가 공개됩니다' : '지갑 주소가 비공개됩니다');
       setSnackbarOpen(true);
