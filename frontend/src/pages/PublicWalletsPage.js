@@ -165,24 +165,31 @@ const PublicWalletsPage = () => {
   }
 
   return (
-    <Container maxWidth="lg" sx={{ mt: 4, mb: 4 }}>
-      <Paper elevation={3} sx={{ p: 4 }}>
+    <Container maxWidth="lg" sx={{ mt: { xs: 2, sm: 4 }, mb: 4, px: { xs: 1, sm: 2 } }}>
+      <Paper elevation={3} sx={{ p: { xs: 2, sm: 4 } }}>
         {/* 헤더 */}
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <PublicIcon sx={{ fontSize: 32, mr: 2, color: 'primary.main' }} />
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: { xs: 'column', sm: 'row' },
+          alignItems: { xs: 'flex-start', sm: 'center' }, 
+          justifyContent: 'space-between', 
+          mb: 3,
+          gap: 2
+        }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+            <PublicIcon sx={{ fontSize: { xs: 28, sm: 32 }, mr: 2, color: 'primary.main' }} />
             <Box>
-              <Typography variant="h4" component="h1">
+              <Typography variant="h4" component="h1" sx={{ fontSize: { xs: '1.5rem', sm: '2rem' } }}>
                 공개 지갑 게시판
               </Typography>
-              <Typography variant="body2" color="text.secondary">
+              <Typography variant="body2" color="text.secondary" sx={{ fontSize: { xs: '0.75rem', sm: '0.875rem' } }}>
                 {filteredWallets.length}명의 사용자가 지갑 주소를 공개했습니다
               </Typography>
             </Box>
           </Box>
-          <Box sx={{ display: 'flex', gap: 1 }}>
+          <Box sx={{ display: 'flex', gap: 1, width: { xs: '100%', sm: 'auto' } }}>
             <Tooltip title="새로고침">
-              <IconButton onClick={fetchPublicWallets} color="primary">
+              <IconButton onClick={fetchPublicWallets} color="primary" sx={{ ml: { xs: 'auto', sm: 0 } }}>
                 <RefreshIcon />
               </IconButton>
             </Tooltip>
@@ -190,6 +197,7 @@ const PublicWalletsPage = () => {
               variant="outlined"
               startIcon={<SettingsIcon />}
               onClick={() => navigate('/settings')}
+              sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
             >
               설정
             </Button>
@@ -223,6 +231,9 @@ const PublicWalletsPage = () => {
               </InputAdornment>
             )
           }}
+          inputProps={{
+            style: { fontSize: '16px' } // iOS 줌 방지
+          }}
         />
 
         {/* 지갑 목록 */}
@@ -244,28 +255,45 @@ const PublicWalletsPage = () => {
             </Button>
           </Box>
         ) : (
-          <Grid container spacing={3}>
+          <Grid container spacing={{ xs: 2, sm: 3 }}>
             {filteredWallets.map((wallet, index) => (
-              <Grid item xs={12} md={6} key={index}>
+              <Grid item xs={12} sm={6} md={6} key={index}>
                 <Card 
                   elevation={2}
                   sx={{ 
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
                     transition: 'transform 0.2s, box-shadow 0.2s',
                     '&:hover': {
-                      transform: 'translateY(-4px)',
-                      boxShadow: 4
+                      transform: { xs: 'none', sm: 'translateY(-4px)' },
+                      boxShadow: { xs: 2, sm: 4 }
                     }
                   }}
                 >
-                  <CardContent>
+                  <CardContent sx={{ flexGrow: 1, p: { xs: 2, sm: 3 } }}>
                     {/* 사용자 정보 */}
                     <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                      <WalletIcon sx={{ mr: 1, color: 'primary.main' }} />
-                      <Box sx={{ flex: 1 }}>
-                        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                      <WalletIcon sx={{ mr: 1, color: 'primary.main', fontSize: { xs: 20, sm: 24 } }} />
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography 
+                          variant="h6" 
+                          sx={{ 
+                            fontWeight: 600,
+                            fontSize: { xs: '1rem', sm: '1.25rem' },
+                            wordBreak: 'break-word'
+                          }}
+                        >
                           {wallet.name}
                         </Typography>
-                        <Typography variant="body2" color="text.secondary">
+                        <Typography 
+                          variant="body2" 
+                          color="text.secondary"
+                          sx={{ 
+                            fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                            wordBreak: 'break-word'
+                          }}
+                        >
                           {wallet.email}
                         </Typography>
                       </Box>
@@ -273,6 +301,7 @@ const PublicWalletsPage = () => {
                         label="공개" 
                         color="success" 
                         size="small"
+                        sx={{ fontSize: { xs: '0.7rem', sm: '0.75rem' } }}
                       />
                     </Box>
 
@@ -280,23 +309,34 @@ const PublicWalletsPage = () => {
                     <Box 
                       sx={{ 
                         backgroundColor: 'background.default',
-                        p: 2,
+                        p: { xs: 1.5, sm: 2 },
                         borderRadius: 1,
                         border: '1px solid',
-                        borderColor: 'divider'
+                        borderColor: 'divider',
+                        mb: 2
                       }}
                     >
-                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                      <Typography 
+                        variant="caption" 
+                        color="text.secondary" 
+                        sx={{ 
+                          display: 'block', 
+                          mb: 0.5,
+                          fontSize: { xs: '0.7rem', sm: '0.75rem' }
+                        }}
+                      >
                         지갑 주소
                       </Typography>
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 1 }}>
                         <Tooltip title={wallet.wallet_address}>
                           <Typography 
                             variant="body2" 
                             sx={{ 
                               fontFamily: 'monospace',
-                              fontSize: '0.85rem',
-                              fontWeight: 500
+                              fontSize: { xs: '0.75rem', sm: '0.85rem' },
+                              fontWeight: 500,
+                              wordBreak: 'break-all',
+                              flex: 1
                             }}
                           >
                             {shortenAddress(wallet.wallet_address)}
@@ -307,6 +347,7 @@ const PublicWalletsPage = () => {
                             size="small"
                             onClick={() => handleCopyAddress(wallet.wallet_address)}
                             color={copiedAddress === wallet.wallet_address ? 'success' : 'default'}
+                            sx={{ flexShrink: 0 }}
                           >
                             <CopyIcon fontSize="small" />
                           </IconButton>
@@ -321,7 +362,7 @@ const PublicWalletsPage = () => {
                           display: 'block',
                           mt: 1,
                           wordBreak: 'break-all',
-                          fontSize: '0.7rem'
+                          fontSize: { xs: '0.65rem', sm: '0.7rem' }
                         }}
                       >
                         {wallet.wallet_address}
@@ -329,13 +370,17 @@ const PublicWalletsPage = () => {
                     </Box>
 
                     {/* 송금 버튼 */}
-                    <Box sx={{ mt: 2 }}>
+                    <Box sx={{ mt: 'auto' }}>
                       <Button
                         variant="contained"
                         color="primary"
                         startIcon={<SendIcon />}
                         onClick={() => handleOpenSendDialog(wallet)}
                         fullWidth
+                        sx={{ 
+                          py: { xs: 1.25, sm: 1.5 },
+                          fontSize: { xs: '0.875rem', sm: '1rem' }
+                        }}
                       >
                         송금하기
                       </Button>
@@ -365,25 +410,53 @@ const PublicWalletsPage = () => {
         onClose={handleCloseSendDialog}
         maxWidth="sm"
         fullWidth
+        PaperProps={{
+          sx: {
+            m: { xs: 1, sm: 3 },
+            width: { xs: 'calc(100% - 16px)', sm: 'auto' }
+          }
+        }}
       >
-        <DialogTitle>
+        <DialogTitle sx={{ pb: { xs: 1, sm: 2 } }}>
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <SendIcon sx={{ mr: 1, color: 'primary.main' }} />
-            <Typography variant="h6">토큰 송금</Typography>
+            <SendIcon sx={{ mr: 1, color: 'primary.main', fontSize: { xs: 20, sm: 24 } }} />
+            <Typography variant="h6" sx={{ fontSize: { xs: '1.1rem', sm: '1.25rem' } }}>
+              토큰 송금
+            </Typography>
           </Box>
         </DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{ px: { xs: 2, sm: 3 } }}>
           {selectedWallet && (
-            <Box sx={{ mt: 2 }}>
+            <Box sx={{ mt: { xs: 1, sm: 2 } }}>
               {/* 받는 사람 정보 */}
-              <Box sx={{ mb: 3, p: 2, backgroundColor: 'background.default', borderRadius: 1 }}>
-                <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+              <Box sx={{ mb: 3, p: { xs: 1.5, sm: 2 }, backgroundColor: 'background.default', borderRadius: 1 }}>
+                <Typography 
+                  variant="subtitle2" 
+                  color="text.secondary" 
+                  gutterBottom
+                  sx={{ fontSize: { xs: '0.8rem', sm: '0.875rem' } }}
+                >
                   받는 사람
                 </Typography>
-                <Typography variant="h6" sx={{ mb: 1 }}>
+                <Typography 
+                  variant="h6" 
+                  sx={{ 
+                    mb: 1,
+                    fontSize: { xs: '1rem', sm: '1.25rem' },
+                    wordBreak: 'break-word'
+                  }}
+                >
                   {selectedWallet.name}
                 </Typography>
-                <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+                <Typography 
+                  variant="body2" 
+                  color="text.secondary" 
+                  sx={{ 
+                    mb: 1,
+                    fontSize: { xs: '0.75rem', sm: '0.875rem' },
+                    wordBreak: 'break-word'
+                  }}
+                >
                   {selectedWallet.email}
                 </Typography>
                 <Typography 
@@ -394,8 +467,9 @@ const PublicWalletsPage = () => {
                     display: 'block',
                     backgroundColor: 'white',
                     color: '#000',
-                    p: 1,
-                    borderRadius: 0.5
+                    p: { xs: 0.75, sm: 1 },
+                    borderRadius: 0.5,
+                    fontSize: { xs: '0.7rem', sm: '0.75rem' }
                   }}
                 >
                   {selectedWallet.wallet_address}
@@ -414,13 +488,20 @@ const PublicWalletsPage = () => {
                   endAdornment: <InputAdornment position="end">ART</InputAdornment>
                 }}
                 helperText="송금할 토큰 수량을 입력해주세요"
+                inputProps={{
+                  style: { fontSize: '16px' } // iOS 줌 방지
+                }}
                 autoFocus
               />
             </Box>
           )}
         </DialogContent>
-        <DialogActions sx={{ p: 2, pt: 0 }}>
-          <Button onClick={handleCloseSendDialog} disabled={walletLoading}>
+        <DialogActions sx={{ p: { xs: 1.5, sm: 2 }, pt: 0, gap: 1 }}>
+          <Button 
+            onClick={handleCloseSendDialog} 
+            disabled={walletLoading}
+            sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
+          >
             취소
           </Button>
           <Button 
@@ -428,6 +509,7 @@ const PublicWalletsPage = () => {
             variant="contained"
             disabled={walletLoading || !sendAmount || sendAmount <= 0}
             startIcon={walletLoading ? <CircularProgress size={20} /> : <SendIcon />}
+            sx={{ fontSize: { xs: '0.875rem', sm: '1rem' } }}
           >
             {walletLoading ? '전송 중...' : '송금하기'}
           </Button>
