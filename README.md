@@ -1,139 +1,110 @@
-# 🚀 서버리스 소셜 지갑 시스템
+# Social Wallet — Blockchain Wallet with Social Login
 
-구글/카카오 소셜 로그인으로 자동 생성되는 블록체인 지갑 시스템을 **서버리스**로 배포합니다!
+A full-stack Web3 wallet that lets users sign in with a Google account and immediately receive an Ethereum wallet, an ERC-20 reward token balance, and on-chain staking — no seed phrases, no browser extensions, no prior crypto knowledge required.
 
-## 🏗️ 시스템 구조
+The goal of the project was to remove the biggest onboarding friction in Web3 (key management) while keeping custody of funds transparent: wallets are derived deterministically from the user's credentials, and all token actions settle on the Ethereum Sepolia testnet through a custom ERC-20 contract I wrote and deployed.
 
-- **백엔드**: FastAPI (Vercel 서버리스 함수)
-- **프론트엔드**: React (Vercel 호스팅)
-- **블록체인**: 이더리움 (Sepolia 테스트넷)
-- **스마트 컨트랙트**: AdvancedRewardToken
-- **배포**: Vercel (서버리스)
+**Scope at a glance:** ~900 lines of FastAPI backend, ~300 lines of Solidity across two contract versions, a 5-page React frontend (Login / Dashboard / Wallet / Settings / Public Wallets) with dedicated auth and wallet contexts, and MongoDB collections for users, wallets, and transaction history.
 
-## ✨ 주요 기능
+## Tech Stack
 
-1. **소셜 로그인**: 구글/카카오 계정으로 로그인
-2. **자동 지갑 생성**: 소셜 계정 정보를 기반으로 결정론적 지갑 생성
-3. **토큰 관리**: 토큰 발행, 전송, 스테이킹
-4. **보상 시스템**: 스테이킹을 통한 보상 수령
-5. **스마트 컨트랙트 연동**: 블록체인에서 안전한 토큰 관리
+| Layer | Stack |
+| --- | --- |
+| Smart Contract | Solidity `^0.8.0`, OpenZeppelin (`ERC20`, `Ownable`, `ERC2771Context`), deployed to Ethereum Sepolia |
+| Backend | FastAPI (Python), `web3.py`, PyJWT, Google OAuth 2.0, MongoDB (via `pymongo` / `motor`) |
+| Frontend | React 18, Material UI 5, `web3.js` v4, React Router v6, Context API for auth/wallet state |
+| Infra | Render (backend + frontend), MongoDB Atlas, Infura RPC for Sepolia |
 
-## 🚀 서버리스 배포
+## Key Features
 
-### 1. Vercel CLI 설치
+- **Google OAuth 2.0 login** — Authorization-code flow on the backend; ID token is verified with Google's public keys, then exchanged for a short-lived JWT ([backend/index.py](BlockChainProject/backend/index.py#L614-L712)).
+- **Deterministic wallet derivation** — On first login a wallet is derived from the user's social ID via `SHA-256`, and on password-based recovery it is rebuilt via `keccak256(social_id ∥ password)`, so a returning user never needs to store a private key locally ([backend/index.py](BlockChainProject/backend/index.py#L192-L205)).
+- **One wallet per identity** — The backend enforces a single wallet per social ID at creation time, so password recovery always resolves to the same on-chain address ([backend/index.py](BlockChainProject/backend/index.py#L714-L780)).
+- **Signed transaction relay** — For token transfers, the frontend signs the transaction locally with `web3.js`, and the backend verifies the recovered sender with `w3.eth.account.recover_transaction` before broadcasting, so the private key never touches the server ([backend/index.py](BlockChainProject/backend/index.py#L248-L352)).
+- **Automatic gas top-up** — If the user's wallet has insufficient ETH to pay gas, a project-owned funding wallet sends just enough Sepolia ETH before the transfer is broadcast, giving a gas-less UX without requiring a full EIP-2771 forwarder.
+- **On-chain staking & rewards** — Users can stake ART tokens and claim accrued rewards; the backend builds, signs, and submits the `stake()` / `claimRewards()` calls on the user's behalf against the deployed contract.
+- **Welcome bonus airdrop** — New users receive 100 ART (10,000 in V2) via a one-shot `mintTo` from the project wallet, gated both by a `welcome_bonus_given` flag in MongoDB and by an on-chain `hasReceivedWelcomeBonus` mapping so the airdrop stays idempotent even if the off-chain DB is wiped.
+- **Public wallets directory** — Users can opt in to making their address discoverable via `GET /public/wallets`, backed by a per-user `show_wallet_public` toggle in the settings endpoint.
+- **Transaction history** — Every relayed transfer, stake, claim, and airdrop is persisted to a MongoDB `transactions` collection so users can audit their own activity independently of the chain explorer.
 
-```bash
-npm i -g vercel
+## Smart Contract — `AdvancedRewardToken`
+
+The wallet is backed by a custom ERC-20 I wrote in Solidity. Two versions live in the repo:
+
+- [AdvancedRewardToken.sol](BlockChainProject/AdvancedRewardToken.sol) — the baseline ERC-20 with staking, annual reward accrual, and a capped max supply (`100,000,000 * 10^5`, 5 decimals).
+- [AdvancedRewardTokenV2.sol](BlockChainProject/AdvancedRewardTokenV2.sol) — adds **EIP-2771 meta-transactions** via OpenZeppelin's `ERC2771Context`, so a trusted forwarder can pay gas on behalf of users. This is the upgrade path away from the backend gas top-up workaround above.
+
+Contract highlights:
+
+- `stake(amount)` / `claimRewards()` with a configurable reward rate (default 10% APY), per-user `StakeInfo`, and a lockup period.
+- `WELCOME_BONUS` tracked on-chain per address (`hasReceivedWelcomeBonus`) to make airdrops idempotent even if the off-chain DB is wiped.
+- Events for every state transition (`Staked`, `Unstaked`, `RewardsClaimed`, `WelcomeBonusReceived`) to keep an auditable on-chain trail.
+
+## Architecture
+
+```
+  ┌────────────┐     Google OAuth      ┌──────────────┐
+  │   React    │──────────────────────▶│   FastAPI    │
+  │  (MUI +    │◀────  JWT  ──────────│   backend    │
+  │  web3.js)  │                      └──────┬───────┘
+  └─────┬──────┘                             │
+        │   signed tx (local key)            │ web3.py
+        └────────────────────────────────────┤
+                                             ▼
+                                      ┌──────────────┐
+                                      │  Sepolia +   │
+                                      │ ART contract │
+                                      └──────┬───────┘
+                                             │
+                                      ┌──────▼───────┐
+                                      │  MongoDB     │
+                                      │ (users, tx)  │
+                                      └──────────────┘
 ```
 
-### 2. 프로젝트 배포
+The split was deliberate: **signing stays on the client, broadcasting and bookkeeping stay on the server.** The backend never sees a user private key after initial wallet derivation, and the frontend never needs direct RPC access to Sepolia.
 
-```bash
-# 프로젝트 루트에서
-vercel
+## REST API (selected)
 
-# 질문에 답변:
-# - Set up and deploy? Y
-# - Which scope? (개인 계정 선택)
-# - Link to existing project? N
-# - What's your project's name? social-wallet
-# - In which directory is your code located? ./
-```
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `POST` | `/auth/google/callback` | Exchange a Google authorization code for a short-lived JWT |
+| `POST` | `/auth/password` | Password-based login / wallet recovery, enforces one wallet per social ID |
+| `GET` | `/wallet/info` | Return the user's wallet address and profile |
+| `GET` | `/wallet/balance` | Read ERC-20 balance + stake info directly from the contract |
+| `POST` | `/wallet/transfer` | Verify a client-signed transaction and broadcast it, funding gas if needed |
+| `POST` | `/wallet/stake` | Build, sign, and send `stake(amount)` on the user's behalf |
+| `POST` | `/wallet/claim-rewards` | Build, sign, and send `claimRewards()` on the user's behalf |
+| `POST` | `/wallet/welcome-bonus` | One-shot ART airdrop to a newly created wallet (idempotent on-chain and off-chain) |
+| `GET` / `PUT` | `/user/settings` | Read and update user preferences (e.g. `show_wallet_public`) |
+| `GET` | `/public/wallets` | List opted-in public wallets |
 
-### 3. 환경변수 설정
-
-```bash
-# Vercel 대시보드에서 또는 CLI로 설정
-vercel env add SECRET_KEY
-vercel env add WEB3_PROVIDER
-```
-
-### 4. 자동 배포 설정
-- GitHub 저장소 연결
-- Push할 때마다 자동 배포
-
-## 📁 프로젝트 구조
+## Project Structure
 
 ```
 BlockChainProject/
-├── vercel.json              # Vercel 배포 설정
+├── AdvancedRewardToken.sol       # v1 ERC-20 + staking
+├── AdvancedRewardTokenV2.sol     # v2 adds EIP-2771 meta-tx support
 ├── backend/
-│   ├── api/
-│   │   └── index.py         # 서버리스 함수
-│   └── requirements.txt     # Python 의존성
-├── frontend/
-│   ├── public/
-│   │   └── index.html
-│   ├── src/
-│   │   ├── contexts/
-│   │   │   ├── AuthContext.js
-│   │   │   └── WalletContext.js
-│   │   ├── pages/
-│   │   │   ├── LoginPage.js
-│   │   │   ├── DashboardPage.js
-│   │   │   └── WalletPage.js
-│   │   ├── App.js
-│   │   └── index.js
-│   └── package.json
-├── AdvancedRewardToken.sol  # 스마트 컨트랙트
-├── README.md
-└── README_SERVERLESS.md     # 서버리스 상세 가이드
+│   ├── index.py                  # FastAPI app (auth, wallet, tx relay)
+│   ├── database.py               # MongoDB connection
+│   ├── models.py                 # Pydantic / domain models
+│   └── requirements.txt
+└── frontend/
+    ├── src/
+    │   ├── contexts/             # AuthContext, WalletContext (web3.js)
+    │   ├── pages/                # Login, Dashboard, Wallet, Settings, PublicWallets
+    │   └── App.js
+    └── package.json
 ```
 
-## 🔧 API 엔드포인트
+## What I Learned
 
-### 인증
-- `POST /api/auth/social-login` - 소셜 로그인
+- **Key custody tradeoffs.** Deterministic derivation is a great onboarding story, but it ties wallet recovery to account recovery — so the password is effectively a private key and has to be handled like one.
+- **Gas UX is the real blocker.** The ad-hoc gas top-up works, but writing V2 with `ERC2771Context` made it clear why the ecosystem settled on meta-transactions: the contract itself needs to know the original `_msgSender()`, not just the relayer.
+- **Never broadcast what you can't verify.** Recovering the sender from a signed transaction before relaying it was the single most important line of backend code — without it, a JWT alone would have been enough to spend someone else's tokens.
 
-### 지갑 관리
-- `GET /api/wallet/info` - 지갑 정보 조회
-- `GET /api/wallet/balance` - 토큰 잔액 조회
+## Notes
 
-### 토큰 액션
-- `POST /api/wallet/mint` - 토큰 발행
-- `POST /api/wallet/transfer` - 토큰 전송
-- `POST /api/wallet/stake` - 토큰 스테이킹
-- `POST /api/wallet/claim-rewards` - 보상 청구
-
-## 🛡️ 보안 고려사항
-
-1. **개인키 관리**: 소셜 계정 정보를 기반으로 결정론적 지갑 생성
-2. **JWT 토큰**: 인증을 위한 JWT 토큰 사용
-3. **CORS 설정**: React와의 안전한 통신
-4. **환경변수**: 민감한 정보는 환경변수로 관리
-
-## 🔮 향후 개선사항
-
-1. **실제 소셜 로그인**: Google OAuth, Kakao SDK 연동
-2. **데이터베이스**: PostgreSQL 또는 MongoDB 연동
-3. **이벤트 리스너**: 스마트 컨트랙트 이벤트 실시간 감지
-4. **모바일 지원**: React Native 버전 개발
-5. **다중 체인**: 이더리움 외 다른 블록체인 지원
-
-## 📝 사용법
-
-1. **배포**: Vercel에 배포하면 전 세계 어디서나 접속 가능
-2. **로그인**: 구글 또는 카카오 계정으로 로그인
-3. **지갑 생성**: 자동으로 지갑이 생성되고 주소가 표시됩니다
-4. **토큰 관리**: 대시보드에서 토큰 잔액을 확인하고 액션을 수행할 수 있습니다
-5. **스테이킹**: 토큰을 스테이킹하여 보상을 받을 수 있습니다
-
-## ⚠️ 주의사항
-
-- 현재는 시뮬레이션 모드로 동작합니다
-- 실제 블록체인과 연동하려면 Infura API 키가 필요합니다
-- 테스트넷에서만 사용하세요 (메인넷 사용 금지)
-- 개인키는 안전하게 보관하세요
-- 서버리스 환경에서는 메모리 저장소 사용 (실제 운영에서는 데이터베이스 필요)
-
-## 🤝 기여하기
-
-1. Fork the Project
-2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the Branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
-
-## 📄 라이선스
-
-이 프로젝트는 MIT 라이선스 하에 배포됩니다.
+- The deployment targets **Sepolia** only. Do not point this at mainnet.
+- Environment variables expected by the backend: `SECRET_KEY`, `WEB3_PROVIDER`, `CONTRACT_ADDRESS`, `PROJECT_WALLET_ADDRESS`, `PROJECT_PRIVATE_KEY`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `FRONTEND_URL`, and a MongoDB connection string.
